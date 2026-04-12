@@ -178,15 +178,10 @@
 			const btn = document.getElementById('mainBtn');
 			const errBox = document.getElementById('errorDisplay');
 			btn.disabled = true;
-			btn.innerText = '⌛ Генерирую вопросы...';
+			btn.innerText = '⌛ Генерирую уникальные вопросы...';
 			errBox.style.display = 'none';
 
-			// --- ИСПРАВЛЕННЫЙ БЛОК ---
-			// Используем максимально стабильную версию названия
-			const MODEL_NAME = 'gemini-1.5-flash'; 
-			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
-			// --------------------------
-
+			// Список тем для разнообразия
 			const allPossibleThemes = [
 				"История открытий", "Кино и сериалы", "Мировая кухня", "Гаджеты", 
 				"Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
@@ -199,11 +194,16 @@
 				.slice(0, 6)
 				.join(", ");
 
+			// ИСПОЛЬЗУЕМ СТАБИЛЬНЫЙ АЛИАС
+			const MODEL_NAME = 'gemini-1.5-flash-latest'; 
+			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+
 			const prompt = `Сгенерируй JSON для игры "Своя Игра". 
 			Темы: ${selectedThemes}. 
 			В каждой теме 5 вопросов (100, 200, 300, 400, 500 баллов).
-			Формат ответа: строго JSON массив объектов. БезMarkdown и без пояснений.
-			Пример: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]`;
+			Формат ответа: строго JSON массив объектов.
+			ВАЖНО: Не пиши никаких пояснений, не используй кавычки \` \` \` json. Только чистый текст массива.
+			Структура: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]`;
 
 			try {
 				const resp = await fetch(url, {
@@ -212,27 +212,31 @@
 					body: JSON.stringify({ 
 						contents: [{ parts: [{ text: prompt }] }],
 						generationConfig: { 
-							temperature: 1.0,
+							temperature: 1.0, 
 							topP: 0.95,
-							maxOutputTokens: 2500
+							maxOutputTokens: 3000
 						}
 					})
 				});
 
 				const data = await resp.json();
 				
-				// Если модель всё равно не найдена, попробуем вывести, что именно ответил сервер
 				if (data.error) {
-					console.error("Детальная ошибка:", data.error);
+					// Если и это не помогло, выводим подробности для отладки
+					console.error("Debug Error:", data.error);
 					throw new Error(data.error.message);
 				}
 
 				let textResponse = data.candidates[0].content.parts[0].text;
 
+				// Улучшенная очистка JSON от лишнего мусора
 				const start = textResponse.indexOf('[');
 				const end = textResponse.lastIndexOf(']') + 1;
 				
-				if (start === -1) throw new Error("Не удалось найти JSON в ответе ИИ");
+				if (start === -1) {
+					console.log("Ответ ИИ без JSON:", textResponse);
+					throw new Error("ИИ прислал текст вместо таблицы. Нажми еще раз.");
+				}
 
 				const cleanJson = textResponse.substring(start, end);
 				gameData = JSON.parse(cleanJson);
