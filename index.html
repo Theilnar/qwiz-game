@@ -172,83 +172,84 @@
 			}
 		}
 
-				// --- ЛОГИКА ИГРЫ ---
+        // --- ЛОГИКА ИГРЫ ---
 		async function fullGameGenerate() {
-			if (!API_KEY) return alert("Сначала введите API ключ!");
-			const btn = document.getElementById('mainBtn');
-			const errBox = document.getElementById('errorDisplay');
-			btn.disabled = true;
-			btn.innerText = '⌛ Подбираю уникальные вопросы...';
-			errBox.style.display = 'none';
+            if (!API_KEY) return alert("Сначала введите API ключ!");
+            const btn = document.getElementById('mainBtn');
+            const errBox = document.getElementById('errorDisplay');
+            btn.disabled = true;
+            btn.innerText = '⌛ Ищу интересные факты...';
+            errBox.style.display = 'none';
 
-			// 1. ОГРОМНЫЙ СПИСОК ТЕМ (чтобы игра не надоедала)
-			const allThemes = [
-				"История открытий", "Кино и сериалы", "Мировая кухня", "Гаджеты", 
-				"Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
-				"Музыка", "Игры", "Литература", "Изобретения", "Мифология", "Рыбалка",
-				"Спецтехника", "СССР", "Знаменитости", "Подводный мир", "Архитектура",
-				"Медицина", "Астрономия", "Великие битвы", "Чудеса света", "Бренды",
-				"Робототехника", "Экзотические фрукты", "Мультфильмы", "Города России",
-				"Инструменты", "Электрика", "Динозавры", "Оружие", "Поезда"
-			];
+            // --- БОЛЬШОЙ СПИСОК ТЕМАТИК ---
+            const allPossibleThemes = [
+                "История открытий", "Кино и сериалы", "Мировая кухня", "Гаджеты", 
+                "Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
+                "Музыка", "Игры", "Литература", "Изобретения", "Мифология", "Рыбалка",
+                "Спецтехника", "СССР", "Знаменитости", "Подводный мир", "Архитектура",
+                "Медицина", "Астрономия", "Великие битвы", "Чудеса света", "Бренды",
+                "Инструменты", "Электрика", "Динозавры", "Оружие", "Поезда", "Легенды Рока"
+            ];
 
-			// 2. Выбираем 6 случайных тем из списка выше
-			const selectedThemes = allThemes
-				.sort(() => 0.5 - Math.random())
-				.slice(0, 6)
-				.join(", ");
+            // Выбираем 6 случайных тем из списка
+            const selectedThemes = allPossibleThemes
+                .sort(() => 0.5 - Math.random())
+                .slice(0, 6)
+                .join(", ");
 
-			// 3. ПРОВЕРЕННАЯ МОДЕЛЬ (она точно работает в v1beta)
-			const MODEL_NAME = 'gemini-pro'; 
-			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+            // ИСПОЛЬЗУЕМ СТАБИЛЬНУЮ МОДЕЛЬ
+            const MODEL_NAME = 'gemini-1.5-flash'; 
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
 
-			const prompt = `Сгенерируй JSON для игры "Своя Игра". 
-			ТЕМЫ (выбери строго эти): ${selectedThemes}. 
-			В каждой теме 5 вопросов (100, 200, 300, 400, 500 баллов).
-			Формат ответа: СТРОГО JSON массив объектов без пояснений.
-			Структура: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]`;
+            const prompt = `Генерация игры "Своя Игра". Сделай 6 тем по 5 вопросов (100-500). 
+            Темы для этой игры: ${selectedThemes}. 
+            Вопросы — интересные факты, ответы — короткие (1-2 слова). 
+            ОТВЕТЬ ТОЛЬКО JSON МАССИВОМ. НИКАКОГО ЛИШНЕГО ТЕКСТА.
+            Формат: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}, ...]}, ...]`;
 
-			try {
-				const resp = await fetch(url, {
-					method: 'POST',
-					headers: {'Content-Type': 'application/json'},
-					body: JSON.stringify({ 
-						contents: [{ parts: [{ text: prompt }] }],
-						generationConfig: { 
-							temperature: 1.0, // Максимум разнообразия ответов
-							topP: 0.95
-						}
-					})
-				});
+            try {
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { 
+                            temperature: 1.0, // Увеличиваем креативность для разнообразия
+                            topP: 0.95 
+                        }
+                    })
+                });
 
-				const data = await resp.json();
-				
-				if (data.error) {
-					throw new Error(`Ошибка ${data.error.code}: ${data.error.message}`);
-				}
+                if (!resp.ok) {
+                    const data = await resp.json();
+                    throw new Error(data.error.message);
+                }
 
-				let textResponse = data.candidates[0].content.parts[0].text;
+                const data = await resp.json();
+                let textResponse = data.candidates[0].content.parts[0].text;
 
-				// 4. ОЧИСТКА JSON (вырезаем только саму таблицу, если ИИ добавил текст)
-				const start = textResponse.indexOf('[');
-				const end = textResponse.lastIndexOf(']') + 1;
-				
-				if (start === -1) throw new Error("ИИ прислал неверный формат. Попробуйте еще раз.");
-
-				const cleanJson = textResponse.substring(start, end);
-				gameData = JSON.parse(cleanJson);
-				
-				renderBoard();
-				document.getElementById('gameBoard').style.display = 'block';
-			} catch (e) {
-				console.error("Debug:", e);
-				errBox.innerText = "Ошибка: " + e.message;
-				errBox.style.display = 'block';
-			} finally {
-				btn.disabled = false;
-				btn.innerText = '🚀 СОЗДАТЬ НОВУЮ ИГРУ';
-			}
-		}
+                // --- ОЧИСТКА ОТ ЛИШНЕГО ТЕКСТА ---
+                const start = textResponse.indexOf('[');
+                const end = textResponse.lastIndexOf(']') + 1;
+                
+                if (start === -1 || end === 0) {
+                    throw new Error("ИИ не прислал таблицу вопросов. Попробуй еще раз.");
+                }
+                
+                const cleanJson = textResponse.substring(start, end);
+                gameData = JSON.parse(cleanJson);
+                
+                renderBoard();
+                document.getElementById('gameBoard').style.display = 'block';
+            } catch (e) {
+                console.error(e);
+                errBox.innerText = "ОШИБКА: " + e.message + "\n\nНажми кнопку еще раз.";
+                errBox.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '🚀 СОЗДАТЬ НОВУЮ ИГРУ';
+            }
+        }
 
 		// Функция отправки команды на ESP32
 		async function sendBleCmd(cmd) {
