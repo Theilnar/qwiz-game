@@ -224,44 +224,44 @@
 		        const characteristic = await service.getCharacteristic(CHAR_UUID);
 		
 		        await characteristic.startNotifications();
-				characteristic.addEventListener('characteristicvaluechanged', (event) => {
-				    const value = new TextDecoder().decode(event.target.value);
-				    const buttonNum = parseInt(value);
-				    console.log("Сигнал от кнопки: " + buttonNum);
-				    
-				    // 1. Находим игрока в массиве по индексу (кнопка 1 = индекс 0)
-				    const playerIndex = buttonNum - 1;
-				    const player = players[playerIndex];
-				
-				    const selector = document.getElementById('playerSelector');
-				    const modal = document.getElementById('questionModal');
-				
-				    // Проверяем, открыто ли окно с вопросом и существует ли игрок
-				    if (modal.classList.contains('active') && player) {
-				        
-				        // 2. Выбираем игрока в выпадающем списке
-				        selector.selectedIndex = playerIndex;
-				        
-				        // Визуальная индикация
-				        selector.style.background = "#238636";
-				        
-				        // 3. ОЗВУЧКА ИМЕНИ
-				        const synth = window.speechSynthesis;
-				        // Говорим имя игрока из массива
-				        const utter = new SpeechSynthesisUtterance(player.name); 
-				        utter.lang = 'ru-RU'; // Устанавливаем русский язык
-				        utter.pitch = 1.0;
-				        utter.rate = 1.0;
-				        synth.speak(utter);
-				
-				        setTimeout(() => {
-				            selector.style.background = "#0d1117";
-				        }, 1000);
-				        
-				    } else if (!player) {
-				        console.log("Нажата кнопка " + buttonNum + ", но такой игрок не добавлен!");
-				    }
-				});
+					characteristic.addEventListener('characteristicvaluechanged', (event) => {
+					    const value = new TextDecoder().decode(event.target.value);
+					    const buttonNum = parseInt(value);
+					    console.log("Сигнал от кнопки: " + buttonNum);
+					    
+					    // 1. Находим игрока в массиве по индексу (кнопка 1 = индекс 0)
+					    const playerIndex = buttonNum - 1;
+					    const player = players[playerIndex];
+					
+					    const selector = document.getElementById('playerSelector');
+					    const modal = document.getElementById('questionModal');
+					
+					    // Проверяем, открыто ли окно с вопросом и существует ли игрок
+					    if (modal.classList.contains('active') && player) {
+					        
+					        // 2. Выбираем игрока в выпадающем списке
+					        selector.selectedIndex = playerIndex;
+					        
+					        // Визуальная индикация
+					        selector.style.background = "#238636";
+					        
+					        // 3. ОЗВУЧКА ИМЕНИ
+					        const synth = window.speechSynthesis;
+					        // Говорим имя игрока из массива
+					        const utter = new SpeechSynthesisUtterance(player.name); 
+					        utter.lang = 'ru-RU'; // Устанавливаем русский язык
+					        utter.pitch = 1.0;
+					        utter.rate = 1.0;
+					        synth.speak(utter);
+					
+					        setTimeout(() => {
+					            selector.style.background = "#0d1117";
+					        }, 1000);
+					        
+					    } else if (!player) {
+					        console.log("Нажата кнопка " + buttonNum + ", но такой игрок не добавлен!");
+					    }
+					});
 				});
 		        alert("Кнопки подключены!");
 		    } catch (error) {
