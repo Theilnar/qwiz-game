@@ -178,38 +178,27 @@
 			const btn = document.getElementById('mainBtn');
 			const errBox = document.getElementById('errorDisplay');
 			btn.disabled = true;
-			btn.innerText = '⌛ Генерирую новую игру...';
+			btn.innerText = '⌛ Ожидание лимитов...';
 			errBox.style.display = 'none';
 
-			// 1. Огромный список тем для исключения повторов
 			const allThemes = [
-				"Космос и Вселенная", "История СССР", "Мировые столицы", "Бренды и логотипы",
-				"Советские мультфильмы", "Автомобили 90-х", "Мировая кухня", "Гаджеты будущего",
-				"Животные-рекордсмены", "Великие открытия", "Спорт и олимпиады", "Рок-музыка",
-				"Компьютерные игры", "Анатомия человека", "Морские обитатели", "Инструменты",
-				"Знаменитые стройки", "Физика в быту", "Химия вокруг нас", "Легенды и мифы"
+				"История открытий", "Кино 90-х", "Мировая кухня", "Гаджеты", 
+				"Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
+				"Музыка", "Игры", "Литература", "Изобретения", "Мифология", "Рыбалка"
 			];
 
-			// 2. Выбираем 6 абсолютно случайных тем из списка
 			const selectedThemes = allThemes
 				.sort(() => 0.5 - Math.random())
 				.slice(0, 6)
 				.join(", ");
 
-			// 3. Та самая рабочая ссылка и модель
-			const MODEL_NAME = 'gemini-pro'; 
+			// Самая экономная модель для бесплатного тарифа
+			const MODEL_NAME = 'gemini-1.5-flash'; 
 			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
 
-			// 4. Промпт с требованием уникальности
-			const prompt = `Сгенерируй игру "Своя Игра" в формате JSON.
-			ТЕМЫ: ${selectedThemes}. 
-			В каждой теме строго 5 вопросов с ценником 100, 200, 300, 400, 500.
-			ТРЕБОВАНИЯ:
-			- Вопросы должны быть средними по сложности.
-			- Ответы короткими (1-2 слова).
-			- НЕ ПОВТОРЯЙ вопросы из прошлых сессий. Используй редкие факты.
-			ФОРМАТ: [{"theme": "Тема", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]
-			ОТВЕТЬ ТОЛЬКО ЧИСТЫМ JSON МАССИВОМ.`;
+			const prompt = `JSON для игры "Свояк". Темы: ${selectedThemes}. 
+			В каждой теме 5 вопросов (100-500). 
+			Ответь ТОЛЬКО JSON: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]`;
 
 			try {
 				const resp = await fetch(url, {
@@ -218,30 +207,33 @@
 					body: JSON.stringify({ 
 						contents: [{ parts: [{ text: prompt }] }],
 						generationConfig: { 
-							temperature: 0.9, // Добавляем немного "фантазии"
-							topP: 1
+							temperature: 1.0, 
+							maxOutputTokens: 2000 
 						}
 					})
 				});
 
-				if (!resp.ok) {
-					const errorData = await resp.json();
-					throw new Error(errorData.error.message);
+				const data = await resp.json();
+				
+				if (data.error) {
+					// Умная обработка лимитов
+					if (data.error.code === 429) {
+						throw new Error("Слишком много запросов! Подождите 1 минуту и попробуйте снова.");
+					}
+					throw new Error(data.error.message);
 				}
 
-				const data = await resp.json();
 				let textResponse = data.candidates[0].content.parts[0].text;
-
-				// Чистим JSON от лишнего текста, если он есть
 				const start = textResponse.indexOf('[');
 				const end = textResponse.lastIndexOf(']') + 1;
-				const cleanJson = textResponse.substring(start, end);
 				
-				gameData = JSON.parse(cleanJson);
+				if (start === -1) throw new Error("ИИ прислал некорректный формат.");
+
+				gameData = JSON.parse(textResponse.substring(start, end));
 				renderBoard();
 				document.getElementById('gameBoard').style.display = 'block';
 			} catch (e) {
-				errBox.innerText = "Ошибка генерации: " + e.message;
+				errBox.innerText = "Внимание: " + e.message;
 				errBox.style.display = 'block';
 			} finally {
 				btn.disabled = false;
