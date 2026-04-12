@@ -200,13 +200,24 @@
 		    const CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 		
 		    try {
+		        console.log("Запрос устройства...");
 		        const device = await navigator.bluetooth.requestDevice({
 		            filters: [{ name: 'Svoyak_Buttons' }],
 		            optionalServices: [SERVICE_UUID]
 		        });
 		
+		        // Если устройство уже было подключено — пробуем переподключить
+		        if (device.gatt.connected) {
+		            await device.gatt.disconnect();
+		        }
+		
+		        console.log("Подключение к GATT серверу...");
 		        const server = await device.gatt.connect();
+		        
+		        console.log("Поиск сервиса...");
 		        const service = await server.getPrimaryService(SERVICE_UUID);
+		        
+		        console.log("Поиск характеристики...");
 		        const characteristic = await service.getCharacteristic(CHAR_UUID);
 		
 		        await characteristic.startNotifications();
