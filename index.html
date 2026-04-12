@@ -178,17 +178,38 @@
 			const btn = document.getElementById('mainBtn');
 			const errBox = document.getElementById('errorDisplay');
 			btn.disabled = true;
-			btn.innerText = '⌛ Очищаю ответ от болтовни...';
+			btn.innerText = '⌛ Генерирую уникальные вопросы...';
 			errBox.style.display = 'none';
 
-			const MODEL_NAME = 'gemini-flash-lite-latest'; 
+			// Огромный список тем для разнообразия
+			const allPossibleThemes = [
+				"История древнего мира", "Космические открытия", "Мировая литература", 
+				"Анатомия человека", "Автомобильные бренды", "Советское кино", 
+				"Современные технологии", "География и флаги", "Мифология", 
+				"Рок-музыка", "Животный мир", "Кулинария народов мира", 
+				"Великие изобретения", "Спорт и рекорды", "Научная фантастика",
+				"Подводный мир", "Архитектура", "Видеоигры", "Физика вокруг нас"
+			];
+
+			// Перемешиваем и выбираем 6 случайных тем
+			const selectedThemes = allPossibleThemes
+				.sort(() => 0.5 - Math.random())
+				.slice(0, 6)
+				.join(", ");
+
+			const MODEL_NAME = 'gemini-1.5-flash'; 
 			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
 
-			const prompt = `Генерация игры "Своя Игра". Сделай 6 тем по 5 вопросов (100-500). 
-			Темы: История, Кино/Игры, Юмор, Биология, Авто, Технологии. 
-			Вопросы — факты, ответы — короткие. 
-			ОТВЕТЬ ТОЛЬКО JSON МАССИВОМ. НИКАКОГО ЛИШНЕГО ТЕКСТА.
-			Формат: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}, ...]}, ...]`;
+			// Обновленный промпт с требованием уникальности
+			const prompt = `Сгенерируй игру "Своя Игра". 
+			ТЕМЫ (выбери строго эти): ${selectedThemes}.
+			В каждой теме 5 вопросов разной сложности (от 100 до 500 баллов).
+			ТРЕБОВАНИЯ:
+			1. Вопросы должны быть интересными, не банальными. Избегай самых известных фактов.
+			2. Ответы должны быть короткими (1-3 слова).
+			3. Используй текущую дату для контекста, если нужно: ${new Date().toLocaleDateString()}.
+			4. ОТВЕТЬ ТОЛЬКО ЧИСТЫМ JSON МАССИВОМ.
+			Формат: [{"theme": "Название", "questions": [{"val": 100, "q": "Текст", "a": "Ответ"}, ...]}, ...]`;
 
 			try {
 				const resp = await fetch(url, {
@@ -196,35 +217,27 @@
 					headers: {'Content-Type': 'application/json'},
 					body: JSON.stringify({ 
 						contents: [{ parts: [{ text: prompt }] }],
-						generationConfig: { temperature: 0.1 }
+						generationConfig: { 
+							temperature: 1.0, // Увеличиваем креативность (было 0.1)
+							topP: 0.95
+						}
 					})
 				});
 
-				if (!resp.ok) {
-					const data = await resp.json();
-					throw new Error(data.error.message);
-				}
+				if (!resp.ok) throw new Error("Ошибка API");
 
 				const data = await resp.json();
 				let textResponse = data.candidates[0].content.parts[0].text;
 
-				// --- МАГИЯ ОЧИСТКИ ТУТ ---
-				// Ищем индекс первого [ и последнего ]
 				const start = textResponse.indexOf('[');
 				const end = textResponse.lastIndexOf(']') + 1;
-				
-				if (start === -1 || end === 0) {
-					throw new Error("ИИ не прислал JSON массив. Попробуй еще раз.");
-				}
-				
 				const cleanJson = textResponse.substring(start, end);
-				gameData = JSON.parse(cleanJson);
-				// -------------------------
 				
+				gameData = JSON.parse(cleanJson);
 				renderBoard();
 				document.getElementById('gameBoard').style.display = 'block';
 			} catch (e) {
-				errBox.innerText = "ОШИБКА РАЗБОРА: " + e.message + "\n\nОтвет ИИ был не по формату. Нажми кнопку еще раз.";
+				errBox.innerText = "Ошибка: " + e.message;
 				errBox.style.display = 'block';
 			} finally {
 				btn.disabled = false;
