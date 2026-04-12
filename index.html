@@ -181,10 +181,17 @@
 			btn.innerText = '⌛ Генерирую вопросы...';
 			errBox.style.display = 'none';
 
+			// --- ИСПРАВЛЕННЫЙ БЛОК ---
+			// Используем максимально стабильную версию названия
+			const MODEL_NAME = 'gemini-1.5-flash'; 
+			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+			// --------------------------
+
 			const allPossibleThemes = [
 				"История открытий", "Кино и сериалы", "Мировая кухня", "Гаджеты", 
 				"Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
-				"Музыка", "Игры", "Литература", "Изобретения", "Мифология"
+				"Музыка", "Игры", "Литература", "Изобретения", "Мифология", "Подводный мир",
+				"Архитектура", "Знаменитые личности", "Медицина", "Астрономия"
 			];
 
 			const selectedThemes = allPossibleThemes
@@ -192,16 +199,11 @@
 				.slice(0, 6)
 				.join(", ");
 
-			// Используем актуальную модель
-			const MODEL_NAME = 'gemini-1.5-flash'; 
-			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
-
 			const prompt = `Сгенерируй JSON для игры "Своя Игра". 
 			Темы: ${selectedThemes}. 
 			В каждой теме 5 вопросов (100, 200, 300, 400, 500 баллов).
-			Формат ответа: строго JSON массив объектов.
-			Пример: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]
-			Важно: только JSON, без текста до и после.`;
+			Формат ответа: строго JSON массив объектов. БезMarkdown и без пояснений.
+			Пример: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]`;
 
 			try {
 				const resp = await fetch(url, {
@@ -209,29 +211,20 @@
 					headers: {'Content-Type': 'application/json'},
 					body: JSON.stringify({ 
 						contents: [{ parts: [{ text: prompt }] }],
-						// Добавляем настройки, чтобы ИИ не скромничал и не блокировал сам себя
-						safetySettings: [
-							{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-							{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-							{ category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-							{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-						],
 						generationConfig: { 
-							temperature: 0.9,
+							temperature: 1.0,
 							topP: 0.95,
-							maxOutputTokens: 2048
+							maxOutputTokens: 2500
 						}
 					})
 				});
 
 				const data = await resp.json();
 				
+				// Если модель всё равно не найдена, попробуем вывести, что именно ответил сервер
 				if (data.error) {
+					console.error("Детальная ошибка:", data.error);
 					throw new Error(data.error.message);
-				}
-
-				if (!data.candidates || !data.candidates[0].content) {
-					throw new Error("ИИ заблокировал ответ. Попробуй еще раз.");
 				}
 
 				let textResponse = data.candidates[0].content.parts[0].text;
@@ -239,7 +232,7 @@
 				const start = textResponse.indexOf('[');
 				const end = textResponse.lastIndexOf(']') + 1;
 				
-				if (start === -1) throw new Error("Некорректный формат ответа ИИ");
+				if (start === -1) throw new Error("Не удалось найти JSON в ответе ИИ");
 
 				const cleanJson = textResponse.substring(start, end);
 				gameData = JSON.parse(cleanJson);
@@ -248,7 +241,7 @@
 				document.getElementById('gameBoard').style.display = 'block';
 			} catch (e) {
 				console.error(e);
-				errBox.innerText = "Ошибка API: " + e.message + "\nПопробуй нажать еще раз.";
+				errBox.innerText = "Ошибка: " + e.message;
 				errBox.style.display = 'block';
 			} finally {
 				btn.disabled = false;
