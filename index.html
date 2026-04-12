@@ -119,27 +119,43 @@
 		// Убедитесь, что функция handleScore выглядит так:
 		function handleScore(isCorrect) {
 			const playerId = parseInt(document.getElementById('playerSelector').value);
-			const player = players.find(p => p.id === playerId);
+			const playerIndex = players.findIndex(p => p.id === playerId);
+			const player = players[playerIndex];
 			
 			if (player && currentQ) {
 				if (isCorrect) {
 					player.score += currentQ.val;
 					currentQ.done = true;
-					renderPlayers();
-					renderBoard();
-					closeModal();
-					checkEndGame();
+					sendBleCmd("W" + (playerIndex + 1)); // Желтый мигающий
+					setTimeout(() => {
+						sendBleCmd("C0"); // Сброс ленты
+						renderPlayers(); renderBoard(); closeModal(); checkEndGame();
+					}, 2000);
 				} else {
 					player.score -= currentQ.val;
 					renderPlayers();
+					sendBleCmd("E" + (playerIndex + 1)); // Красный горит
 					
-					// КЛЮЧЕВОЙ МОМЕНТ: Разблокируем кнопки для других игроков
-					isButtonBlocked = false; 
-					
-					const synth = window.speechSynthesis;
-					const utter = new SpeechSynthesisUtterance("Неверно! Кнопки активны.");
-					utter.lang = 'ru-RU';
-					synth.speak(utter);
+					isButtonBlocked = false;
+
+					// ПРОВЕРКА: Если все игроки уже попробовали и ошиблись
+					if (playersWhoAttempted.length >= players.length) {
+						const synth = window.speechSynthesis;
+						const utter = new SpeechSynthesisUtterance("Никто не ответил верно. Вопрос снят.");
+						utter.lang = 'ru-RU';
+						synth.speak(utter);
+						
+						setTimeout(() => {
+							sendBleCmd("C0"); // Очистить ленту
+							currentQ.done = true; // Считаем вопрос пройденным
+							renderBoard(); closeModal();
+						}, 2000);
+					} else {
+						const synth = window.speechSynthesis;
+						const utter = new SpeechSynthesisUtterance("Ошибка! Кнопки активны.");
+						utter.lang = 'ru-RU';
+						synth.speak(utter);
+					}
 				}
 			}
 		}
@@ -214,6 +230,13 @@
 			}
 		}
 
+		// Функция отправки команды на ESP32
+		async function sendBleCmd(cmd) {
+			if (bleCharacteristic) {
+				const data = new TextEncoder().encode(cmd);
+				await bleCharacteristic.writeValue(data);
+			}
+		}
 		async function connectBluetooth() {
 			const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 			const CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
@@ -288,6 +311,7 @@
 
 		// Функция открытия модального окна (сброс истории попыток)
 		function openModal(tIdx, qIdx) {
+			sendBleCmd("C0"); // Выключаем все красные огни с прошлого вопроса
 			currentQ = gameData[tIdx].questions[qIdx];
 			if (currentQ.done) return;
 			
