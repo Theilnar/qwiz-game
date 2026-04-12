@@ -178,39 +178,35 @@
 			const btn = document.getElementById('mainBtn');
 			const errBox = document.getElementById('errorDisplay');
 			btn.disabled = true;
-			btn.innerText = '⌛ Подбираю уникальные темы...';
+			btn.innerText = '⌛ Подбираю уникальные вопросы...';
 			errBox.style.display = 'none';
 
-			// ОГРОМНЫЙ СПИСОК ТЕМ (35 штук)
+			// 1. ОГРОМНЫЙ СПИСОК ТЕМ (чтобы игра не надоедала)
 			const allThemes = [
-				"Космос и Галактики", "Мировая История", "Автомобили и Моторы", 
-				"Кино и Сериалы", "Советские Мультфильмы", "Великие Изобретения", 
-				"География и Флаги", "Животный Мир", "Мифология", "Музыка всех времен", 
-				"Видеоигры", "Спорт и Рекорды", "Анатомия Человека", "Кулинария", 
-				"Подводный Мир", "Технологии Будущего", "Знаменитости", "Архитектура", 
-				"Рыбалка и Охота", "Спецтехника", "Химия и Физика", "Города России", 
-				"Древний Египет", "Динозавры", "Оружие и Доспехи", "Компьютеры", 
-				"Микробиология", "Садоводство", "Поезда и Самолеты", "Электрика и Схемы",
-				"Инструменты", "Комиксы и Герои", "Астрономия", "Медицина", "Легенды Рока"
+				"История открытий", "Кино и сериалы", "Мировая кухня", "Гаджеты", 
+				"Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
+				"Музыка", "Игры", "Литература", "Изобретения", "Мифология", "Рыбалка",
+				"Спецтехника", "СССР", "Знаменитости", "Подводный мир", "Архитектура",
+				"Медицина", "Астрономия", "Великие битвы", "Чудеса света", "Бренды",
+				"Робототехника", "Экзотические фрукты", "Мультфильмы", "Города России",
+				"Инструменты", "Электрика", "Динозавры", "Оружие", "Поезда"
 			];
 
-			// Перемешиваем и выбираем 6 случайных тем для этой игры
+			// 2. Выбираем 6 случайных тем из списка выше
 			const selectedThemes = allThemes
 				.sort(() => 0.5 - Math.random())
 				.slice(0, 6)
 				.join(", ");
 
-			// ИСПОЛЬЗУЕМ ТОЛЬКО ПРОВЕРЕННУЮ МОДЕЛЬ
+			// 3. ПРОВЕРЕННАЯ МОДЕЛЬ (она точно работает в v1beta)
 			const MODEL_NAME = 'gemini-pro'; 
 			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
 
-			const prompt = `Сгенерируй JSON для игры "Своя Игра".
-			ТЕМЫ: ${selectedThemes}. 
-			В каждой теме 5 вопросов разной сложности (100, 200, 300, 400, 500 баллов).
-			Вопросы должны быть интересными и не повторяться. 
-			Ответы должны быть короткими (1-2 слова).
-			ОТВЕТЬ ТОЛЬКО ЧИСТЫМ JSON МАССИВОМ БЕЗ ПОЯСНЕНИЙ.
-			Формат: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]`;
+			const prompt = `Сгенерируй JSON для игры "Своя Игра". 
+			ТЕМЫ (выбери строго эти): ${selectedThemes}. 
+			В каждой теме 5 вопросов (100, 200, 300, 400, 500 баллов).
+			Формат ответа: СТРОГО JSON массив объектов без пояснений.
+			Структура: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]`;
 
 			try {
 				const resp = await fetch(url, {
@@ -219,8 +215,8 @@
 					body: JSON.stringify({ 
 						contents: [{ parts: [{ text: prompt }] }],
 						generationConfig: { 
-							temperature: 1.0, // Высокая температура для максимального разнообразия
-							topP: 1
+							temperature: 1.0, // Максимум разнообразия ответов
+							topP: 0.95
 						}
 					})
 				});
@@ -228,22 +224,25 @@
 				const data = await resp.json();
 				
 				if (data.error) {
-					throw new Error(data.error.message);
+					throw new Error(`Ошибка ${data.error.code}: ${data.error.message}`);
 				}
 
 				let textResponse = data.candidates[0].content.parts[0].text;
 
-				// Очистка от лишнего текста (на случай если ИИ добавит пояснения)
+				// 4. ОЧИСТКА JSON (вырезаем только саму таблицу, если ИИ добавил текст)
 				const start = textResponse.indexOf('[');
 				const end = textResponse.lastIndexOf(']') + 1;
-				const cleanJson = textResponse.substring(start, end);
 				
+				if (start === -1) throw new Error("ИИ прислал неверный формат. Попробуйте еще раз.");
+
+				const cleanJson = textResponse.substring(start, end);
 				gameData = JSON.parse(cleanJson);
+				
 				renderBoard();
 				document.getElementById('gameBoard').style.display = 'block';
 			} catch (e) {
-				console.error("Ошибка:", e);
-				errBox.innerText = "Ошибка генерации: " + e.message;
+				console.error("Debug:", e);
+				errBox.innerText = "Ошибка: " + e.message;
 				errBox.style.display = 'block';
 			} finally {
 				btn.disabled = false;
