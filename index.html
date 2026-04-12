@@ -72,6 +72,8 @@
         let players = JSON.parse(localStorage.getItem('game_players')) || [{id: 1, name: 'Игрок 1', score: 0}];
         let gameData = []; 
         let currentQ = null;
+		let isButtonBlocked = false; // Блокировка всех кнопок
+		let playersWhoAttempted = []; // Список ID игроков, которые уже нажимали в этом раунде
 
         document.getElementById('apiKeyInput').value = API_KEY;
         renderPlayers();
@@ -112,16 +114,35 @@
             selector.innerHTML = players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         }
 
+		// Измененная функция начисления баллов
 		function handleScore(isCorrect) {
 			const playerId = parseInt(document.getElementById('playerSelector').value);
 			const player = players.find(p => p.id === playerId);
+			
 			if (player && currentQ) {
-				player.score += isCorrect ? currentQ.val : -currentQ.val;
-				currentQ.done = true;
-				renderPlayers();
-				renderBoard();
-				closeModal();
-				checkEndGame(); // Проверяем, не закончились ли вопросы
+				if (isCorrect) {
+					// ЕСЛИ ПРАВИЛЬНО: начисляем баллы и закрываем вопрос
+					player.score += currentQ.val;
+					currentQ.done = true;
+					renderPlayers();
+					renderBoard();
+					closeModal();
+					checkEndGame();
+				} else {
+					// ЕСЛИ ОШИБКА: отнимаем баллы и РАЗБЛОКИРУЕМ кнопки для других
+					player.score -= currentQ.val;
+					renderPlayers();
+					
+					isButtonBlocked = false; // Снова даем возможность другим нажать
+					
+					// Озвучка для атмосферы
+					const synth = window.speechSynthesis;
+					const utter = new SpeechSynthesisUtterance("Ошибка! Кто следующий?");
+					utter.lang = 'ru-RU';
+					synth.speak(utter);
+					
+					alert(`Игрок ${player.name} ошибся! Кнопки снова активны для остальных.`);
+				}
 			}
 		}
 
@@ -285,16 +306,52 @@
             });
         }
 
-        function openModal(tIdx, qIdx) {
-            currentQ = gameData[tIdx].questions[qIdx];
-            if (currentQ.done) return;
-            document.getElementById('modalTheme').innerText = gameData[tIdx].theme;
-            document.getElementById('modalValue').innerText = currentQ.val;
-            document.getElementById('modalQuestion').innerText = currentQ.q;
-            document.getElementById('ans').innerText = currentQ.a;
-            document.getElementById('ans').style.display = 'none';
-            document.getElementById('questionModal').classList.add('active');
-        }
+		// Функция открытия модального окна (сброс истории попыток)
+		function openModal(tIdx, qIdx) {
+			currentQ = gameData[tIdx].questions[qIdx];
+			if (currentQ.done) return;
+			
+			// СБРОС СОСТОЯНИЯ ДЛЯ НОВОГО ВОПРОСА
+			isButtonBlocked = false; 
+			playersWhoAttempted = []; 
+			
+			document.getElementById('modalTheme').innerText = gameData[tIdx].theme;
+			document.getElementById('modalValue').innerText = currentQ.val;
+			document.getElementById('modalQuestion').innerText = currentQ.q;
+			document.getElementById('ans').innerText = currentQ.a;
+			document.getElementById('ans').style.display = 'none';
+			document.getElementById('questionModal').classList.add('active');
+		}
+		// Измененная логика обработки сигнала от кнопок
+		characteristic.addEventListener('characteristicvaluechanged', (event) => {
+			if (isButtonBlocked) return; // Если кто-то уже нажал и ждет вердикта — игнорируем остальных
+
+			const value = new TextDecoder().decode(event.target.value);
+			const buttonNum = parseInt(value);
+			const playerIndex = buttonNum - 1;
+			const player = players[playerIndex];
+
+			const modal = document.getElementById('questionModal');
+			const selector = document.getElementById('playerSelector');
+
+			// Проверяем: окно открыто, игрок существует и он ЕЩЕ НЕ отвечал на этот вопрос
+			if (modal.classList.contains('active') && player && !playersWhoAttempted.includes(player.id)) {
+				
+				isButtonBlocked = true; // БЛОКИРУЕМ кнопки для остальных
+				playersWhoAttempted.push(player.id); // Запоминаем, что этот игрок использовал попытку
+				
+				selector.selectedIndex = playerIndex;
+				selector.style.background = "#238636";
+
+				// Озвучка имени
+				const synth = window.speechSynthesis;
+				const utter = new SpeechSynthesisUtterance(player.name);
+				utter.lang = 'ru-RU';
+				synth.speak(utter);
+
+				setTimeout(() => { selector.style.background = "#0d1117"; }, 1000);
+			}
+		});
 
         function closeModal() { document.getElementById('questionModal').classList.remove('active'); }
     </script>
