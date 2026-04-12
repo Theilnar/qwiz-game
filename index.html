@@ -213,6 +213,9 @@
 		
 		        console.log("Подключение к GATT серверу...");
 		        const server = await device.gatt.connect();
+
+				// Даем ESP32 передохнуть полсекунды
+        		await new Promise(resolve => setTimeout(resolve, 500));
 		        
 		        console.log("Поиск сервиса...");
 		        const service = await server.getPrimaryService(SERVICE_UUID);
