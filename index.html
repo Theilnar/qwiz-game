@@ -178,16 +178,17 @@
 			const btn = document.getElementById('mainBtn');
 			const errBox = document.getElementById('errorDisplay');
 			btn.disabled = true;
-			btn.innerText = '⌛ Подключаюсь к ИИ...';
+			btn.innerText = '⌛ Подключаюсь к Google AI...';
 			errBox.style.display = 'none';
 
-			// 1. ЕЩЕ БОЛЬШЕ ТЕМАТИК (добавляй сюда любые через запятую)
+			// Огромный список тем для бесконечного разнообразия
 			const allThemes = [
 				"История открытий", "Кино и сериалы", "Мировая кухня", "Гаджеты", 
 				"Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
 				"Музыка", "Игры", "Литература", "Изобретения", "Мифология", "Рыбалка",
 				"Спецтехника", "СССР", "Знаменитости", "Подводный мир", "Архитектура",
-				"Медицина", "Астрономия", "Великие битвы", "Чудеса света", "Бренды"
+				"Медицина", "Астрономия", "Великие битвы", "Чудеса света", "Бренды",
+				"Робототехника", "Экзотические фрукты", "Мультфильмы", "Города России"
 			];
 
 			const selectedThemes = allThemes
@@ -195,16 +196,15 @@
 				.slice(0, 6)
 				.join(", ");
 
-			// 2. ИСПРАВЛЕННЫЙ ПУТЬ К МОДЕЛИ (теперь с префиксом models/)
-			const MODEL_NAME = 'models/gemini-1.5-flash'; 
-			const url = `https://generativelanguage.googleapis.com/v1beta/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+			// САМЫЙ СТАБИЛЬНЫЙ ВАРИАНТ URL (версия v1beta)
+			const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
 			const prompt = `Сгенерируй JSON для игры "Своя Игра".
 			ТЕМЫ: ${selectedThemes}. 
 			В каждой теме 5 вопросов (100, 200, 300, 400, 500 баллов).
 			Формат ответа: СТРОГО JSON массив объектов.
 			Структура: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]
-			ВАЖНО: Пиши только JSON, без лишних слов.`;
+			Важно: только JSON, без текста до и после.`;
 
 			try {
 				const resp = await fetch(url, {
@@ -222,23 +222,25 @@
 				const data = await resp.json();
 				
 				if (data.error) {
-					// Если опять будет ошибка 404, значит Google требует версию без префикса (редко, но бывает)
-					throw new Error(`Ошибка API (${data.error.code}): ${data.error.message}`);
+					// Если и это не поможет, выведем точный код ошибки для отладки
+					throw new Error(`Код ${data.error.code}: ${data.error.message}`);
 				}
 
 				let textResponse = data.candidates[0].content.parts[0].text;
 
-				// Очистка от Markdown и лишнего текста
+				// Очистка от лишних символов (Markdown и прочее)
 				const start = textResponse.indexOf('[');
 				const end = textResponse.lastIndexOf(']') + 1;
 				
-				if (start === -1) throw new Error("ИИ прислал некорректный формат данных.");
+				if (start === -1) throw new Error("ИИ прислал неверный формат данных.");
 
-				gameData = JSON.parse(textResponse.substring(start, end));
+				const cleanJson = textResponse.substring(start, end);
+				gameData = JSON.parse(cleanJson);
+				
 				renderBoard();
 				document.getElementById('gameBoard').style.display = 'block';
 			} catch (e) {
-				console.error(e);
+				console.error("Debug:", e);
 				errBox.innerText = "Ошибка: " + e.message;
 				errBox.style.display = 'block';
 			} finally {
