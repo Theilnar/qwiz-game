@@ -194,6 +194,37 @@
 			}
 		}
 
+		async function connectBluetooth() {
+		    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+		    const CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+		
+		    try {
+		        const device = await navigator.bluetooth.requestDevice({
+		            filters: [{ name: 'Svoyak_Buttons' }],
+		            optionalServices: [SERVICE_UUID]
+		        });
+		
+		        const server = await device.gatt.connect();
+		        const service = await server.getPrimaryService(SERVICE_UUID);
+		        const characteristic = await service.getCharacteristic(CHAR_UUID);
+		
+		        await characteristic.startNotifications();
+		        characteristic.addEventListener('characteristicvaluechanged', (event) => {
+		            const value = new TextDecoder().decode(event.target.value);
+		            console.log("Нажал игрок №: " + value);
+		            
+		            // Логика автоматического выбора игрока в модальном окне
+		            const selector = document.getElementById('playerSelector');
+		            if (selector && value <= players.length) {
+		                selector.selectedIndex = value - 1;
+		                // Можно добавить звук или подсветку
+		            }
+		        });
+		        alert("Кнопки подключены!");
+		    } catch (error) {
+		        console.error("Ошибка BT:", error);
+		    }
+		}
         function renderBoard() {
             const grid = document.getElementById('themesGrid');
             grid.innerHTML = '';
