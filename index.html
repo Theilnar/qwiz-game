@@ -172,44 +172,36 @@
 			}
 		}
 
-        // --- ЛОГИКА ИГРЫ ---
+				// --- ЛОГИКА ИГРЫ ---
 		async function fullGameGenerate() {
 			if (!API_KEY) return alert("Сначала введите API ключ!");
 			const btn = document.getElementById('mainBtn');
 			const errBox = document.getElementById('errorDisplay');
 			btn.disabled = true;
-			btn.innerText = '⌛ Генерирую уникальные вопросы...';
+			btn.innerText = '⌛ Генерирую вопросы...';
 			errBox.style.display = 'none';
 
-			// Огромный список тем для разнообразия
 			const allPossibleThemes = [
-				"История древнего мира", "Космические открытия", "Мировая литература", 
-				"Анатомия человека", "Автомобильные бренды", "Советское кино", 
-				"Современные технологии", "География и флаги", "Мифология", 
-				"Рок-музыка", "Животный мир", "Кулинария народов мира", 
-				"Великие изобретения", "Спорт и рекорды", "Научная фантастика",
-				"Подводный мир", "Архитектура", "Видеоигры", "Физика вокруг нас"
+				"История открытий", "Кино и сериалы", "Мировая кухня", "Гаджеты", 
+				"Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
+				"Музыка", "Игры", "Литература", "Изобретения", "Мифология"
 			];
 
-			// Перемешиваем и выбираем 6 случайных тем
 			const selectedThemes = allPossibleThemes
 				.sort(() => 0.5 - Math.random())
 				.slice(0, 6)
 				.join(", ");
 
+			// Используем актуальную модель
 			const MODEL_NAME = 'gemini-1.5-flash'; 
 			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
 
-			// Обновленный промпт с требованием уникальности
-			const prompt = `Сгенерируй игру "Своя Игра". 
-			ТЕМЫ (выбери строго эти): ${selectedThemes}.
-			В каждой теме 5 вопросов разной сложности (от 100 до 500 баллов).
-			ТРЕБОВАНИЯ:
-			1. Вопросы должны быть интересными, не банальными. Избегай самых известных фактов.
-			2. Ответы должны быть короткими (1-3 слова).
-			3. Используй текущую дату для контекста, если нужно: ${new Date().toLocaleDateString()}.
-			4. ОТВЕТЬ ТОЛЬКО ЧИСТЫМ JSON МАССИВОМ.
-			Формат: [{"theme": "Название", "questions": [{"val": 100, "q": "Текст", "a": "Ответ"}, ...]}, ...]`;
+			const prompt = `Сгенерируй JSON для игры "Своя Игра". 
+			Темы: ${selectedThemes}. 
+			В каждой теме 5 вопросов (100, 200, 300, 400, 500 баллов).
+			Формат ответа: строго JSON массив объектов.
+			Пример: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]
+			Важно: только JSON, без текста до и после.`;
 
 			try {
 				const resp = await fetch(url, {
@@ -217,27 +209,46 @@
 					headers: {'Content-Type': 'application/json'},
 					body: JSON.stringify({ 
 						contents: [{ parts: [{ text: prompt }] }],
+						// Добавляем настройки, чтобы ИИ не скромничал и не блокировал сам себя
+						safetySettings: [
+							{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+							{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+							{ category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+							{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+						],
 						generationConfig: { 
-							temperature: 1.0, // Увеличиваем креативность (было 0.1)
-							topP: 0.95
+							temperature: 0.9,
+							topP: 0.95,
+							maxOutputTokens: 2048
 						}
 					})
 				});
 
-				if (!resp.ok) throw new Error("Ошибка API");
-
 				const data = await resp.json();
+				
+				if (data.error) {
+					throw new Error(data.error.message);
+				}
+
+				if (!data.candidates || !data.candidates[0].content) {
+					throw new Error("ИИ заблокировал ответ. Попробуй еще раз.");
+				}
+
 				let textResponse = data.candidates[0].content.parts[0].text;
 
 				const start = textResponse.indexOf('[');
 				const end = textResponse.lastIndexOf(']') + 1;
-				const cleanJson = textResponse.substring(start, end);
 				
+				if (start === -1) throw new Error("Некорректный формат ответа ИИ");
+
+				const cleanJson = textResponse.substring(start, end);
 				gameData = JSON.parse(cleanJson);
+				
 				renderBoard();
 				document.getElementById('gameBoard').style.display = 'block';
 			} catch (e) {
-				errBox.innerText = "Ошибка: " + e.message;
+				console.error(e);
+				errBox.innerText = "Ошибка API: " + e.message + "\nПопробуй нажать еще раз.";
 				errBox.style.display = 'block';
 			} finally {
 				btn.disabled = false;
