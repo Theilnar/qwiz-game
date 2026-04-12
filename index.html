@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Свояк ИИ - Финальная Версия</title>
+    <title>Свояк ИИ - Инженерная Сборка</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #0b0e14; color: #e0e0e0; text-align: center; padding: 20px; margin: 0; }
         .container { max-width: 1100px; margin: 0 auto; }
@@ -35,7 +35,7 @@
             <input type="text" id="playerNameInput" placeholder="Имя игрока">
             <button onclick="addPlayer()" style="background: #1f6feb;">➕ Добавить игрока</button>
             <button onclick="fullGameGenerate()" id="mainBtn" style="background: #238636;">🚀 СОЗДАТЬ ИГРУ</button>
-			<button onclick="connectBluetooth()" style="background: #8b5cf6;">🔌 ПОДКЛЮЧИТЬ КНОПКИ</button>
+            <button onclick="connectBluetooth()" style="background: #8b5cf6;">🔌 ПОДКЛЮЧИТЬ КНОПКИ</button>
         </div>
 
         <div id="playersList" style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;"></div>
@@ -69,9 +69,13 @@
 
     <script>
         let API_KEY = localStorage.getItem('gemini_key') || '';
-        let players = JSON.parse(localStorage.getItem('game_players')) || [{id: 1, name: 'Игрок 1', score: 0}];
+        let players = JSON.parse(localStorage.getItem('game_players')) || [];
         let gameData = []; 
         let currentQ = null;
+        
+        // Переменные для логики кнопок
+        let isButtonBlocked = false; 
+        let playersWhoAttempted = [];
 
         document.getElementById('apiKeyInput').value = API_KEY;
         renderPlayers();
@@ -82,7 +86,6 @@
             alert('Ключ сохранен');
         }
 
-        // --- ЛОГИКА ИГРОКОВ ---
         function addPlayer() {
             const nameInput = document.getElementById('playerNameInput');
             const name = nameInput.value.trim() || `Игрок ${players.length + 1}`;
@@ -112,161 +115,117 @@
             selector.innerHTML = players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         }
 
-		function handleScore(isCorrect) {
-			const playerId = parseInt(document.getElementById('playerSelector').value);
-			const player = players.find(p => p.id === playerId);
-			if (player && currentQ) {
-				player.score += isCorrect ? currentQ.val : -currentQ.val;
-				currentQ.done = true;
-				renderPlayers();
-				renderBoard();
-				closeModal();
-				checkEndGame(); // Проверяем, не закончились ли вопросы
-			}
-		}
+        // --- ЛОГИКА НАЧИСЛЕНИЯ БАЛЛОВ ---
+        function handleScore(isCorrect) {
+            const playerId = parseInt(document.getElementById('playerSelector').value);
+            const player = players.find(p => p.id === playerId);
+            
+            if (player && currentQ) {
+                if (isCorrect) {
+                    player.score += currentQ.val;
+                    currentQ.done = true;
+                    renderPlayers();
+                    renderBoard();
+                    closeModal();
+                    checkEndGame();
+                } else {
+                    player.score -= currentQ.val;
+                    renderPlayers();
+                    
+                    // Разблокируем для других после ошибки
+                    isButtonBlocked = false; 
+                    
+                    const synth = window.speechSynthesis;
+                    const utter = new SpeechSynthesisUtterance("Ошибка! Кто следующий?");
+                    utter.lang = 'ru-RU';
+                    synth.speak(utter);
+                    
+                    alert(`Игрок ${player.name} ошибся! Кнопки активны для остальных.`);
+                }
+            }
+        }
 
-		function checkEndGame() {
-			const allQuestions = gameData.flatMap(t => t.questions);
-			const answeredCount = allQuestions.filter(q => q.done).length;
-			
-			if (answeredCount === allQuestions.length && allQuestions.length > 0) {
-				const winner = [...players].sort((a, b) => b.score - a.score)[0];
-				alert(`🏆 ИГРА ОКОНЧЕНА!\n\nПобедитель: ${winner.name}\nСчет: ${winner.score}`);
-			}
-		}
+        function checkEndGame() {
+            const allQuestions = gameData.flatMap(t => t.questions);
+            const answeredCount = allQuestions.filter(q => q.done).length;
+            if (answeredCount === allQuestions.length && allQuestions.length > 0) {
+                const winner = [...players].sort((a, b) => b.score - a.score)[0];
+                alert(`🏆 ИГРА ОКОНЧЕНА!\n\nПобедитель: ${winner.name}\nСчет: ${winner.score}`);
+            }
+        }
 
-        // --- ЛОГИКА ИГРЫ ---
-		async function fullGameGenerate() {
-			if (!API_KEY) return alert("Сначала введите API ключ!");
-			const btn = document.getElementById('mainBtn');
-			const errBox = document.getElementById('errorDisplay');
-			btn.disabled = true;
-			btn.innerText = '⌛ Очищаю ответ от болтовни...';
-			errBox.style.display = 'none';
+        async function fullGameGenerate() {
+            if (!API_KEY) return alert("Введите API ключ!");
+            const btn = document.getElementById('mainBtn');
+            btn.disabled = true;
+            btn.innerText = '⌛ Генерирую...';
 
-			const MODEL_NAME = 'gemini-flash-lite-latest'; 
-			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+            const prompt = `Генерация игры "Своя Игра". 6 тем по 5 вопросов (100-500). Темы: История, Кино, Юмор, Биология, Авто, Технологии. Ответ ТОЛЬКО JSON: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}, ...]}, ...]`;
 
-			const prompt = `Генерация игры "Своя Игра". Сделай 6 тем по 5 вопросов (100-500). 
-			Темы: История, Кино/Игры, Юмор, Биология, Авто, Технологии. 
-			Вопросы — факты, ответы — короткие. 
-			ОТВЕТЬ ТОЛЬКО JSON МАССИВОМ. НИКАКОГО ЛИШНЕГО ТЕКСТА.
-			Формат: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}, ...]}, ...]`;
+            try {
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const data = await resp.json();
+                let text = data.candidates[0].content.parts[0].text;
+                const cleanJson = text.substring(text.indexOf('['), text.lastIndexOf(']') + 1);
+                gameData = JSON.parse(cleanJson);
+                renderBoard();
+                document.getElementById('gameBoard').style.display = 'block';
+            } catch (e) {
+                alert("Ошибка ИИ. Попробуйте еще раз.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '🚀 СОЗДАТЬ НОВУЮ ИГРУ';
+            }
+        }
 
-			try {
-				const resp = await fetch(url, {
-					method: 'POST',
-					headers: {'Content-Type': 'application/json'},
-					body: JSON.stringify({ 
-						contents: [{ parts: [{ text: prompt }] }],
-						generationConfig: { temperature: 0.1 }
-					})
-				});
+        async function connectBluetooth() {
+            const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+            const CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: 'Svoyak_Buttons' }],
+                    optionalServices: [SERVICE_UUID]
+                });
+                const server = await device.gatt.connect();
+                await new Promise(r => setTimeout(r, 600));
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                const char = await service.getCharacteristic(CHAR_UUID);
+                await char.startNotifications();
+                
+                char.addEventListener('characteristicvaluechanged', (event) => {
+                    if (isButtonBlocked) return;
 
-				if (!resp.ok) {
-					const data = await resp.json();
-					throw new Error(data.error.message);
-				}
+                    const val = new TextDecoder().decode(event.target.value);
+                    const btnNum = parseInt(val);
+                    const pIdx = btnNum - 1;
+                    const player = players[pIdx];
+                    const modal = document.getElementById('questionModal');
 
-				const data = await resp.json();
-				let textResponse = data.candidates[0].content.parts[0].text;
+                    if (modal.classList.contains('active') && player && !playersWhoAttempted.includes(player.id)) {
+                        isButtonBlocked = true;
+                        playersWhoAttempted.push(player.id);
+                        
+                        const sel = document.getElementById('playerSelector');
+                        sel.selectedIndex = pIdx;
+                        sel.style.background = "#238636";
 
-				// --- МАГИЯ ОЧИСТКИ ТУТ ---
-				// Ищем индекс первого [ и последнего ]
-				const start = textResponse.indexOf('[');
-				const end = textResponse.lastIndexOf(']') + 1;
-				
-				if (start === -1 || end === 0) {
-					throw new Error("ИИ не прислал JSON массив. Попробуй еще раз.");
-				}
-				
-				const cleanJson = textResponse.substring(start, end);
-				gameData = JSON.parse(cleanJson);
-				// -------------------------
-				
-				renderBoard();
-				document.getElementById('gameBoard').style.display = 'block';
-			} catch (e) {
-				errBox.innerText = "ОШИБКА РАЗБОРА: " + e.message + "\n\nОтвет ИИ был не по формату. Нажми кнопку еще раз.";
-				errBox.style.display = 'block';
-			} finally {
-				btn.disabled = false;
-				btn.innerText = '🚀 СОЗДАТЬ НОВУЮ ИГРУ';
-			}
-		}
+                        const synth = window.speechSynthesis;
+                        const utter = new SpeechSynthesisUtterance(player.name);
+                        utter.lang = 'ru-RU';
+                        synth.speak(utter);
+                        
+                        setTimeout(() => sel.style.background = "#0d1117", 1000);
+                    }
+                });
+                alert("Кнопки подключены!");
+            } catch (e) { alert("Ошибка BT: " + e.message); }
+        }
 
-		async function connectBluetooth() {
-		    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-		    const CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
-		
-		    try {
-		        console.log("Запрос устройства...");
-		        const device = await navigator.bluetooth.requestDevice({
-		            filters: [{ name: 'Svoyak_Buttons' }],
-		            optionalServices: [SERVICE_UUID]
-		        });
-		
-		        // Если устройство уже было подключено — пробуем переподключить
-		        if (device.gatt.connected) {
-		            await device.gatt.disconnect();
-		        }
-		
-		        console.log("Подключение к GATT серверу...");
-		        const server = await device.gatt.connect();
-
-				// Даем ESP32 передохнуть полсекунды
-        		await new Promise(resolve => setTimeout(resolve, 500));
-		        
-		        console.log("Поиск сервиса...");
-		        const service = await server.getPrimaryService(SERVICE_UUID);
-		        
-		        console.log("Поиск характеристики...");
-		        const characteristic = await service.getCharacteristic(CHAR_UUID);
-		
-		        await characteristic.startNotifications();
-				characteristic.addEventListener('characteristicvaluechanged', (event) => {
-				    const value = new TextDecoder().decode(event.target.value);
-				    const buttonNum = parseInt(value);
-				    console.log("Сигнал от кнопки: " + buttonNum);
-				    
-				    // 1. Находим игрока в массиве по индексу (кнопка 1 = индекс 0)
-				    const playerIndex = buttonNum - 1;
-				    const player = players[playerIndex];
-				
-				    const selector = document.getElementById('playerSelector');
-				    const modal = document.getElementById('questionModal');
-				
-				    // Проверяем, открыто ли окно с вопросом и существует ли игрок
-				    if (modal.classList.contains('active') && player) {
-				        
-				        // 2. Выбираем игрока в выпадающем списке
-				        selector.selectedIndex = playerIndex;
-				        
-				        // Визуальная индикация
-				        selector.style.background = "#238636";
-				        
-				        // 3. ОЗВУЧКА ИМЕНИ
-				        const synth = window.speechSynthesis;
-				        // Говорим имя игрока из массива
-				        const utter = new SpeechSynthesisUtterance(player.name); 
-				        utter.lang = 'ru-RU'; // Устанавливаем русский язык
-				        utter.pitch = 1.0;
-				        utter.rate = 1.0;
-				        synth.speak(utter);
-				
-				        setTimeout(() => {
-				            selector.style.background = "#0d1117";
-				        }, 1000);
-				        
-				    } else if (!player) {
-				        console.log("Нажата кнопка " + buttonNum + ", но такой игрок не добавлен!");
-				    }
-				});
-		        alert("Кнопки подключены!");
-		    } catch (error) {
-		        console.error("Ошибка BT:", error);
-		    }
-		}
         function renderBoard() {
             const grid = document.getElementById('themesGrid');
             grid.innerHTML = '';
@@ -288,6 +247,10 @@
         function openModal(tIdx, qIdx) {
             currentQ = gameData[tIdx].questions[qIdx];
             if (currentQ.done) return;
+            
+            isButtonBlocked = false; 
+            playersWhoAttempted = []; 
+
             document.getElementById('modalTheme').innerText = gameData[tIdx].theme;
             document.getElementById('modalValue').innerText = currentQ.val;
             document.getElementById('modalQuestion').innerText = currentQ.q;
