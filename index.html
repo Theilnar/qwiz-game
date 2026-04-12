@@ -178,32 +178,33 @@
             const btn = document.getElementById('mainBtn');
             const errBox = document.getElementById('errorDisplay');
             btn.disabled = true;
-            btn.innerText = '⌛ Ищу интересные факты...';
+            btn.innerText = '⌛ Генерирую уникальные темы...';
             errBox.style.display = 'none';
 
-            // --- БОЛЬШОЙ СПИСОК ТЕМАТИК ---
-            const allPossibleThemes = [
-                "История открытий", "Кино и сериалы", "Мировая кухня", "Гаджеты", 
-                "Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
-                "Музыка", "Игры", "Литература", "Изобретения", "Мифология", "Рыбалка",
-                "Спецтехника", "СССР", "Знаменитости", "Подводный мир", "Архитектура",
-                "Медицина", "Астрономия", "Великие битвы", "Чудеса света", "Бренды",
-                "Инструменты", "Электрика", "Динозавры", "Оружие", "Поезда", "Легенды Рока"
+            // --- ОГРОМНЫЙ СПИСОК ТЕМАТИК ДЛЯ РАЗНООБРАЗИЯ ---
+            const allThemes = [
+                "Космос и Вселенная", "История СССР", "Мировые столицы", "Автомобили и Двигатели",
+                "Советские Мультфильмы", "Гаджеты и Технологии", "Мировая Кухня", "Спорт и Рекорды",
+                "Животные-рекордсмены", "Великие Открытия", "Рок-музыка", "Кино 90-х",
+                "Компьютерные Игры", "Анатомия Человека", "Морские Обитатели", "Инструменты",
+                "Знаменитые Личности", "Физика в Быту", "Химия вокруг нас", "Легенды и Мифы",
+                "Рыбалка и Охота", "Спецтехника", "Города России", "Чудеса Света",
+                "Бренды и Логотипы", "Медицина", "Астрономия", "Подводный Мир", "Архитектура"
             ];
 
-            // Выбираем 6 случайных тем из списка
-            const selectedThemes = allPossibleThemes
+            // Перемешиваем и выбираем 6 случайных тем
+            const selectedThemes = allThemes
                 .sort(() => 0.5 - Math.random())
                 .slice(0, 6)
                 .join(", ");
 
-            // ИСПОЛЬЗУЕМ СТАБИЛЬНУЮ МОДЕЛЬ
+            // ИСПОЛЬЗУЕМ АКТУАЛЬНУЮ МОДЕЛЬ И ПРАВИЛЬНЫЙ ПУТЬ
             const MODEL_NAME = 'gemini-1.5-flash'; 
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
 
             const prompt = `Генерация игры "Своя Игра". Сделай 6 тем по 5 вопросов (100-500). 
-            Темы для этой игры: ${selectedThemes}. 
-            Вопросы — интересные факты, ответы — короткие (1-2 слова). 
+            ТЕМЫ ДЛЯ ЭТОЙ ИГРЫ: ${selectedThemes}. 
+            Вопросы — интересные факты, ответы — очень короткие (1-2 слова). 
             ОТВЕТЬ ТОЛЬКО JSON МАССИВОМ. НИКАКОГО ЛИШНЕГО ТЕКСТА.
             Формат: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}, ...]}, ...]`;
 
@@ -214,7 +215,7 @@
                     body: JSON.stringify({ 
                         contents: [{ parts: [{ text: prompt }] }],
                         generationConfig: { 
-                            temperature: 1.0, // Увеличиваем креативность для разнообразия
+                            temperature: 1.0, // Чтобы вопросы всегда были разными
                             topP: 0.95 
                         }
                     })
@@ -222,19 +223,26 @@
 
                 if (!resp.ok) {
                     const data = await resp.json();
-                    throw new Error(data.error.message);
+                    // Если лимиты (429), просим подождать
+                    if (resp.status === 429) {
+                        throw new Error("Слишком много запросов. Подождите 30 секунд.");
+                    }
+                    throw new Error(data.error.message || "Ошибка сервера");
                 }
 
                 const data = await resp.json();
+                
+                if (!data.candidates || !data.candidates[0].content) {
+                    throw new Error("ИИ не выдал ответ. Попробуйте еще раз.");
+                }
+
                 let textResponse = data.candidates[0].content.parts[0].text;
 
-                // --- ОЧИСТКА ОТ ЛИШНЕГО ТЕКСТА ---
+                // Очистка от лишнего текста
                 const start = textResponse.indexOf('[');
                 const end = textResponse.lastIndexOf(']') + 1;
                 
-                if (start === -1 || end === 0) {
-                    throw new Error("ИИ не прислал таблицу вопросов. Попробуй еще раз.");
-                }
+                if (start === -1) throw new Error("Не удалось разобрать данные от ИИ.");
                 
                 const cleanJson = textResponse.substring(start, end);
                 gameData = JSON.parse(cleanJson);
@@ -243,7 +251,7 @@
                 document.getElementById('gameBoard').style.display = 'block';
             } catch (e) {
                 console.error(e);
-                errBox.innerText = "ОШИБКА: " + e.message + "\n\nНажми кнопку еще раз.";
+                errBox.innerText = "ОШИБКА: " + e.message + "\n\nПопробуйте нажать кнопку еще раз через 10 секунд.";
                 errBox.style.display = 'block';
             } finally {
                 btn.disabled = false;
