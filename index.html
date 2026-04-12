@@ -178,15 +178,15 @@
 			const btn = document.getElementById('mainBtn');
 			const errBox = document.getElementById('errorDisplay');
 			btn.disabled = true;
-			btn.innerText = '⌛ Генерирую уникальные вопросы...';
+			btn.innerText = '⌛ Генерирую уникальную игру...';
 			errBox.style.display = 'none';
 
-			// Список тем для разнообразия
+			// Расширенный список тем для Набережных Челнов и не только :)
 			const allPossibleThemes = [
 				"История открытий", "Кино и сериалы", "Мировая кухня", "Гаджеты", 
 				"Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
 				"Музыка", "Игры", "Литература", "Изобретения", "Мифология", "Подводный мир",
-				"Архитектура", "Знаменитые личности", "Медицина", "Астрономия"
+				"Архитектура", "Знаменитые личности", "Медицина", "Астрономия", "Рыбалка", "Спецтехника"
 			];
 
 			const selectedThemes = allPossibleThemes
@@ -194,15 +194,14 @@
 				.slice(0, 6)
 				.join(", ");
 
-			// ИСПОЛЬЗУЕМ СТАБИЛЬНЫЙ АЛИАС
-			const MODEL_NAME = 'gemini-1.5-flash-latest'; 
+			// ИСПОЛЬЗУЕМ САМУЮ СВЕЖУЮ МОДЕЛЬ 2026 ГОДА
+			const MODEL_NAME = 'gemini-2.0-flash'; 
 			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
 
 			const prompt = `Сгенерируй JSON для игры "Своя Игра". 
 			Темы: ${selectedThemes}. 
 			В каждой теме 5 вопросов (100, 200, 300, 400, 500 баллов).
-			Формат ответа: строго JSON массив объектов.
-			ВАЖНО: Не пиши никаких пояснений, не используй кавычки \` \` \` json. Только чистый текст массива.
+			Формат ответа: СТРОГО JSON массив объектов. БезMarkdown (никаких \` \` \` json).
 			Структура: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]`;
 
 			try {
@@ -212,7 +211,7 @@
 					body: JSON.stringify({ 
 						contents: [{ parts: [{ text: prompt }] }],
 						generationConfig: { 
-							temperature: 1.0, 
+							temperature: 1.0, // Максимум разнообразия
 							topP: 0.95,
 							maxOutputTokens: 3000
 						}
@@ -222,21 +221,17 @@
 				const data = await resp.json();
 				
 				if (data.error) {
-					// Если и это не помогло, выводим подробности для отладки
-					console.error("Debug Error:", data.error);
+					// Если gemini-2.0 не сработает, попробуй заменить MODEL_NAME на 'gemini-1.5-flash-latest'
 					throw new Error(data.error.message);
 				}
 
 				let textResponse = data.candidates[0].content.parts[0].text;
 
-				// Улучшенная очистка JSON от лишнего мусора
+				// Чистим JSON от возможных кавычек ИИ
 				const start = textResponse.indexOf('[');
 				const end = textResponse.lastIndexOf(']') + 1;
 				
-				if (start === -1) {
-					console.log("Ответ ИИ без JSON:", textResponse);
-					throw new Error("ИИ прислал текст вместо таблицы. Нажми еще раз.");
-				}
+				if (start === -1) throw new Error("ИИ прислал текст вместо таблицы данных.");
 
 				const cleanJson = textResponse.substring(start, end);
 				gameData = JSON.parse(cleanJson);
@@ -244,7 +239,7 @@
 				renderBoard();
 				document.getElementById('gameBoard').style.display = 'block';
 			} catch (e) {
-				console.error(e);
+				console.error("Детали:", e);
 				errBox.innerText = "Ошибка: " + e.message;
 				errBox.style.display = 'block';
 			} finally {
