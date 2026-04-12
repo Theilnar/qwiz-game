@@ -178,13 +178,15 @@
 			const btn = document.getElementById('mainBtn');
 			const errBox = document.getElementById('errorDisplay');
 			btn.disabled = true;
-			btn.innerText = '⌛ Ожидание лимитов...';
+			btn.innerText = '⌛ Ищу интересные факты...';
 			errBox.style.display = 'none';
 
+			// Твой список тем для разнообразия
 			const allThemes = [
-				"История открытий", "Кино 90-х", "Мировая кухня", "Гаджеты", 
+				"История открытий", "Кино и сериалы", "Мировая кухня", "Гаджеты", 
 				"Космос", "Автомобили", "Спорт", "Наука", "География", "Животные", 
-				"Музыка", "Игры", "Литература", "Изобретения", "Мифология", "Рыбалка"
+				"Музыка", "Игры", "Литература", "Изобретения", "Мифология", "Рыбалка",
+				"Спецтехника", "СССР", "Знаменитости", "Подводный мир"
 			];
 
 			const selectedThemes = allThemes
@@ -192,13 +194,16 @@
 				.slice(0, 6)
 				.join(", ");
 
-			// Самая экономная модель для бесплатного тарифа
+			// Самая актуальная и быстрая модель на текущий момент
 			const MODEL_NAME = 'gemini-1.5-flash'; 
 			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
 
-			const prompt = `JSON для игры "Свояк". Темы: ${selectedThemes}. 
-			В каждой теме 5 вопросов (100-500). 
-			Ответь ТОЛЬКО JSON: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]`;
+			const prompt = `Сгенерируй JSON для игры "Своя Игра".
+			ТЕМЫ: ${selectedThemes}. 
+			В каждой теме 5 вопросов (100, 200, 300, 400, 500 баллов).
+			Формат ответа: СТРОГО JSON массив объектов.
+			Структура: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}]}]
+			Важно: не пиши ничего, кроме JSON массива.`;
 
 			try {
 				const resp = await fetch(url, {
@@ -208,7 +213,8 @@
 						contents: [{ parts: [{ text: prompt }] }],
 						generationConfig: { 
 							temperature: 1.0, 
-							maxOutputTokens: 2000 
+							topP: 0.95,
+							maxOutputTokens: 2500
 						}
 					})
 				});
@@ -216,24 +222,34 @@
 				const data = await resp.json();
 				
 				if (data.error) {
-					// Умная обработка лимитов
-					if (data.error.code === 429) {
-						throw new Error("Слишком много запросов! Подождите 1 минуту и попробуйте снова.");
+					if (data.error.code === 404) {
+						throw new Error("Модель не найдена. Попробуй обновить API ключ или проверь регион.");
 					}
 					throw new Error(data.error.message);
 				}
 
+				if (!data.candidates || !data.candidates[0].content) {
+					throw new Error("Пустой ответ от ИИ. Попробуй еще раз через 10 секунд.");
+				}
+
 				let textResponse = data.candidates[0].content.parts[0].text;
+
+				// Магия очистки: вырезаем всё, что находится между первой [ и последней ]
 				const start = textResponse.indexOf('[');
 				const end = textResponse.lastIndexOf(']') + 1;
 				
-				if (start === -1) throw new Error("ИИ прислал некорректный формат.");
+				if (start === -1) {
+					throw new Error("ИИ прислал текст без таблицы. Нажми кнопку еще раз.");
+				}
 
-				gameData = JSON.parse(textResponse.substring(start, end));
+				const cleanJson = textResponse.substring(start, end);
+				gameData = JSON.parse(cleanJson);
+				
 				renderBoard();
 				document.getElementById('gameBoard').style.display = 'block';
 			} catch (e) {
-				errBox.innerText = "Внимание: " + e.message;
+				console.error("Детальная ошибка:", e);
+				errBox.innerText = "Ошибка: " + e.message;
 				errBox.style.display = 'block';
 			} finally {
 				btn.disabled = false;
