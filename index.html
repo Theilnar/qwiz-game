@@ -91,7 +91,7 @@
             const name = nameInput.value.trim() || `Игрок ${players.length + 1}`;
             players.push({ id: Date.now(), name: name, score: 0 });
 			// ОТПРАВЛЯЕМ КОМАНДУ НА ЛЕНТУ (А + номер игрока)
-		sendBleCmd("A" + players.length);
+			sendBleCmd("A" + players.length);
             nameInput.value = '';
             renderPlayers();
         }
