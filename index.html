@@ -72,6 +72,7 @@
         let players = JSON.parse(localStorage.getItem('game_players')) || [{id: 1, name: 'Игрок 1', score: 0}];
         let gameData = []; 
         let currentQ = null;
+		let bleCharacteristic = null; // Глобальная переменная для характеристики
 		let isButtonBlocked = false; // Блокировка всех кнопок
 		let playersWhoAttempted = []; // Список ID игроков, которые уже нажимали в этом раунде
 
@@ -115,13 +116,13 @@
         }
 
 		// Измененная функция начисления баллов
+		// Убедитесь, что функция handleScore выглядит так:
 		function handleScore(isCorrect) {
 			const playerId = parseInt(document.getElementById('playerSelector').value);
 			const player = players.find(p => p.id === playerId);
 			
 			if (player && currentQ) {
 				if (isCorrect) {
-					// ЕСЛИ ПРАВИЛЬНО: начисляем баллы и закрываем вопрос
 					player.score += currentQ.val;
 					currentQ.done = true;
 					renderPlayers();
@@ -129,19 +130,16 @@
 					closeModal();
 					checkEndGame();
 				} else {
-					// ЕСЛИ ОШИБКА: отнимаем баллы и РАЗБЛОКИРУЕМ кнопки для других
 					player.score -= currentQ.val;
 					renderPlayers();
 					
-					isButtonBlocked = false; // Снова даем возможность другим нажать
+					// КЛЮЧЕВОЙ МОМЕНТ: Разблокируем кнопки для других игроков
+					isButtonBlocked = false; 
 					
-					// Озвучка для атмосферы
 					const synth = window.speechSynthesis;
-					const utter = new SpeechSynthesisUtterance("Ошибка! Кто следующий?");
+					const utter = new SpeechSynthesisUtterance("Неверно! Кнопки активны.");
 					utter.lang = 'ru-RU';
 					synth.speak(utter);
-					
-					alert(`Игрок ${player.name} ошибся! Кнопки снова активны для остальных.`);
 				}
 			}
 		}
@@ -217,76 +215,58 @@
 		}
 
 		async function connectBluetooth() {
-		    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-		    const CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
-		
-		    try {
-		        console.log("Запрос устройства...");
-		        const device = await navigator.bluetooth.requestDevice({
-		            filters: [{ name: 'Svoyak_Buttons' }],
-		            optionalServices: [SERVICE_UUID]
-		        });
-		
-		        // Если устройство уже было подключено — пробуем переподключить
-		        if (device.gatt.connected) {
-		            await device.gatt.disconnect();
-		        }
-		
-		        console.log("Подключение к GATT серверу...");
-		        const server = await device.gatt.connect();
+			const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+			const CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
-				// Даем ESP32 передохнуть полсекунды
-        		await new Promise(resolve => setTimeout(resolve, 500));
-		        
-		        console.log("Поиск сервиса...");
-		        const service = await server.getPrimaryService(SERVICE_UUID);
-		        
-		        console.log("Поиск характеристики...");
-		        const characteristic = await service.getCharacteristic(CHAR_UUID);
-		
-		        await characteristic.startNotifications();
-				characteristic.addEventListener('characteristicvaluechanged', (event) => {
-				    const value = new TextDecoder().decode(event.target.value);
-				    const buttonNum = parseInt(value);
-				    console.log("Сигнал от кнопки: " + buttonNum);
-				    
-				    // 1. Находим игрока в массиве по индексу (кнопка 1 = индекс 0)
-				    const playerIndex = buttonNum - 1;
-				    const player = players[playerIndex];
-				
-				    const selector = document.getElementById('playerSelector');
-				    const modal = document.getElementById('questionModal');
-				
-				    // Проверяем, открыто ли окно с вопросом и существует ли игрок
-				    if (modal.classList.contains('active') && player) {
-				        
-				        // 2. Выбираем игрока в выпадающем списке
-				        selector.selectedIndex = playerIndex;
-				        
-				        // Визуальная индикация
-				        selector.style.background = "#238636";
-				        
-				        // 3. ОЗВУЧКА ИМЕНИ
-				        const synth = window.speechSynthesis;
-				        // Говорим имя игрока из массива
-				        const utter = new SpeechSynthesisUtterance(player.name); 
-				        utter.lang = 'ru-RU'; // Устанавливаем русский язык
-				        utter.pitch = 1.0;
-				        utter.rate = 1.0;
-				        synth.speak(utter);
-				
-				        setTimeout(() => {
-				            selector.style.background = "#0d1117";
-				        }, 1000);
-				        
-				    } else if (!player) {
-				        console.log("Нажата кнопка " + buttonNum + ", но такой игрок не добавлен!");
-				    }
+			try {
+				const device = await navigator.bluetooth.requestDevice({
+					filters: [{ name: 'Svoyak_Buttons' }],
+					optionalServices: [SERVICE_UUID]
 				});
-		        alert("Кнопки подключены!");
-		    } catch (error) {
-		        console.error("Ошибка BT:", error);
-		    }
+
+				const server = await device.gatt.connect();
+				const service = await server.getPrimaryService(SERVICE_UUID);
+				bleCharacteristic = await service.getCharacteristic(CHAR_UUID);
+
+				await bleCharacteristic.startNotifications();
+				
+				// ЕДИНЫЙ ОБРАБОТЧИК СОБЫТИЙ
+				bleCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+					const modal = document.getElementById('questionModal');
+					
+					// Если окно вопроса не открыто или кнопки заблокированы — игнорируем
+					if (!modal.classList.contains('active') || isButtonBlocked) return;
+
+					const value = new TextDecoder().decode(event.target.value);
+					const buttonNum = parseInt(value);
+					const playerIndex = buttonNum - 1;
+					const player = players[playerIndex];
+
+					// Проверяем, существует ли игрок и не отвечал ли он уже на ЭТОТ вопрос
+					if (player && !playersWhoAttempted.includes(player.id)) {
+						
+						isButtonBlocked = true; // МГНОВЕННАЯ БЛОКИРОВКА
+						playersWhoAttempted.push(player.id); // Записываем попытку
+
+						const selector = document.getElementById('playerSelector');
+						selector.selectedIndex = playerIndex;
+						
+						// Визуальная и звуковая индикация
+						selector.style.background = "#238636";
+						const synth = window.speechSynthesis;
+						const utter = new SpeechSynthesisUtterance(player.name);
+						utter.lang = 'ru-RU';
+						synth.speak(utter);
+
+						setTimeout(() => { selector.style.background = "#0d1117"; }, 1000);
+					}
+				});
+
+				alert("Кнопки успешно подключены и синхронизированы!");
+			} catch (error) {
+				console.error("Ошибка BT:", error);
+				alert("Ошибка подключения: " + error.message);
+			}
 		}
         function renderBoard() {
             const grid = document.getElementById('themesGrid');
