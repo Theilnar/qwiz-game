@@ -126,21 +126,37 @@
 			
 			if (player && currentQ) {
 				if (isCorrect) {
+					// Прибавляем баллы
 					player.score += currentQ.val;
 					currentQ.done = true;
-					sendBleCmd("W" + (playerIndex + 1)); // Желтый мигающий
+
+					// Отправляем команду анимации на ESP32 (Зеленый/мигание)
+					sendBleCmd("W" + (playerIndex + 1)); 
+
+					// Озвучка успеха
+					const synth = window.speechSynthesis;
+					const utter = new SpeechSynthesisUtterance("Верно! Плюс " + currentQ.val);
+					utter.lang = 'ru-RU';
+					synth.speak(utter);
+
 					setTimeout(() => {
-						sendBleCmd("C0"); // Сброс ленты
-						renderPlayers(); renderBoard(); closeModal(); checkEndGame();
+						sendBleCmd("C0"); // Сброс ленты через 2 секунды
+						renderPlayers(); 
+						renderBoard(); 
+						closeModal(); 
+						checkEndGame();
 					}, 2000);
 				} else {
+					// Вычитаем баллы
 					player.score -= currentQ.val;
-					renderPlayers();
-					sendBleCmd("E" + (playerIndex + 1)); // Красный горит
 					
+					// Отправляем команду ошибки на ESP32 (Красный)
+					sendBleCmd("E" + (playerIndex + 1)); 
+					
+					// Разблокируем кнопки для других игроков
 					isButtonBlocked = false;
 
-					// ПРОВЕРКА: Если все игроки уже попробовали и ошиблись
+					// Если все игроки уже ошиблись
 					if (playersWhoAttempted.length >= players.length) {
 						const synth = window.speechSynthesis;
 						const utter = new SpeechSynthesisUtterance("Никто не ответил верно. Вопрос снят.");
@@ -148,20 +164,28 @@
 						synth.speak(utter);
 						
 						setTimeout(() => {
-							sendBleCmd("C0"); // Очистить ленту
-							currentQ.done = true; // Считаем вопрос пройденным
-							renderBoard(); closeModal();
+							sendBleCmd("C0");
+							currentQ.done = true; 
+							renderBoard(); 
+							closeModal();
 						}, 2000);
 					} else {
 						const synth = window.speechSynthesis;
-						const utter = new SpeechSynthesisUtterance("Ошибка! Кнопки активны.");
+						const utter = new SpeechSynthesisUtterance("Ошибка! Кто следующий?");
 						utter.lang = 'ru-RU';
 						synth.speak(utter);
 					}
 				}
+
+				// --- ЛОГИКА ДЛЯ ДИСПЛЕЯ ПЕРВОГО ИГРОКА ---
+				// Если это первый игрок (индекс 0), отправляем его новый счет на TM1637
+				if (playerIndex === 0) {
+					sendBleCmd("S" + player.score);
+				}
+
+				renderPlayers(); // Обновляем таблицу на экране монитора
 			}
 		}
-
 		function checkEndGame() {
 			const allQuestions = gameData.flatMap(t => t.questions);
 			const answeredCount = allQuestions.filter(q => q.done).length;
