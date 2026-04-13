@@ -75,7 +75,7 @@
 		let bleCharacteristic = null; 
 		let isButtonBlocked = false; 
 		let playersWhoAttempted = []; 
-		let bleQueue = Promise.resolve(); // Очередь задач
+		let bleQueue = Promise.resolve(); // Глобальная очередь
 
 		document.getElementById('apiKeyInput').value = API_KEY;
 		renderPlayers();
@@ -216,17 +216,22 @@
 		function sendBleCmd(cmd) {
 			if (!bleCharacteristic) return;
 
-			// Добавляем новую задачу в конец очереди
+			// Встаем в очередь
 			bleQueue = bleQueue.then(async () => {
 				try {
 					const data = new TextEncoder().encode(cmd);
+					// Ждем завершения записи в характеристику
 					await bleCharacteristic.writeValue(data);
-					// Небольшая задержка между командами (50мс), чтобы ESP32 успела обработать
-					await new Promise(resolve => setTimeout(resolve, 50)); 
+					
+					// Техническая пауза 100мс. Дает ESP32 время переварить команду,
+					// а Bluetooth-стеку браузера — освободить GATT-сервер.
+					await new Promise(resolve => setTimeout(resolve, 100));
 				} catch (e) {
-					console.error("Ошибка отправки BLE:", e);
-					// Если произошла ошибка, сбрасываем очередь, чтобы она не "висела"
-					bleQueue = Promise.resolve(); 
+					console.warn("Пропуск команды BLE (канал занят или сбой):", e);
+					// Если произошла фатальная ошибка, сбрасываем очередь
+					if (e.name === 'NetworkError') {
+						bleQueue = Promise.resolve();
+					}
 				}
 			});
 		}
