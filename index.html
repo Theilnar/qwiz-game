@@ -75,6 +75,7 @@
 		let bleCharacteristic = null; 
 		let isButtonBlocked = false; 
 		let playersWhoAttempted = []; 
+		let bleQueue = Promise.resolve(); // Очередь задач
 
 		document.getElementById('apiKeyInput').value = API_KEY;
 		renderPlayers();
@@ -212,13 +213,22 @@
 		}
 
 		// --- BLUETOOTH ---
-		async function sendBleCmd(cmd) {
-			if (bleCharacteristic) {
+		function sendBleCmd(cmd) {
+			if (!bleCharacteristic) return;
+
+			// Добавляем новую задачу в конец очереди
+			bleQueue = bleQueue.then(async () => {
 				try {
 					const data = new TextEncoder().encode(cmd);
 					await bleCharacteristic.writeValue(data);
-				} catch (e) { console.error("Ошибка отправки BLE:", e); }
-			}
+					// Небольшая задержка между командами (50мс), чтобы ESP32 успела обработать
+					await new Promise(resolve => setTimeout(resolve, 50)); 
+				} catch (e) {
+					console.error("Ошибка отправки BLE:", e);
+					// Если произошла ошибка, сбрасываем очередь, чтобы она не "висела"
+					bleQueue = Promise.resolve(); 
+				}
+			});
 		}
 
 		async function connectBluetooth() {
