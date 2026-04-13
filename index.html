@@ -280,9 +280,33 @@
 
 		// Функция отправки команды на ESP32
 		async function sendBleCmd(cmd) {
-			if (bleCharacteristic) {
-				const data = new TextEncoder().encode(cmd);
-				await bleCharacteristic.writeValue(data);
+			if (bleCharacteristic) { // Добавим проверку, чтобы не было ошибок до подключения
+				bleCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+					if (isButtonBlocked) return; 
+
+					const value = new TextDecoder().decode(event.target.value);
+					const buttonNum = parseInt(value);
+					const playerIndex = buttonNum - 1;
+					const player = players[playerIndex];
+
+					const modal = document.getElementById('questionModal');
+					const selector = document.getElementById('playerSelector');
+
+					if (modal.classList.contains('active') && player && !playersWhoAttempted.includes(player.id)) {
+						isButtonBlocked = true; 
+						playersWhoAttempted.push(player.id); 
+						
+						selector.selectedIndex = playerIndex;
+						selector.style.background = "#238636";
+
+						const synth = window.speechSynthesis;
+						const utter = new SpeechSynthesisUtterance(player.name);
+						utter.lang = 'ru-RU';
+						synth.speak(utter);
+
+						setTimeout(() => { selector.style.background = "#0d1117"; }, 1000);
+					}
+				});
 			}
 		}
 		async function connectBluetooth() {
