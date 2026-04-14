@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Свояк ИИ 2.9 - Multi-Mode & Player Management</title>
+    <title>Свояк ИИ 2.9.2 - Balanced Edition</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #0b0e14; color: #e0e0e0; text-align: center; padding: 20px; margin: 0; }
         .container { max-width: 1100px; margin: 0 auto; }
@@ -26,14 +26,14 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎮 Свояк: Сборка 2.9 (Управление + Режимы)</h1>
+        <h1>🎮 Свояк: Сборка 2.9.2 (Balanced)</h1>
         
         <div class="card">
             <input type="password" id="apiKeyInput" placeholder="Gemini API Key" style="width: 180px;">
             <select id="gameMode">
-                <option value="детский (простые темы: мультики, животные, сказки)">👶 Детский режим</option>
-                <option value="средний (классика, общие знания, кино, история)" selected>👨 Обычный режим</option>
-                <option value="хардкор (наука, сложные термины, редкие факты)">🔥 Хардкор (Тур 2)</option>
+                <option value="детский (простые и веселые темы для детей)">👶 Детский режим</option>
+                <option value="средний (классический Свояк, общие знания)" selected>👨 Обычный режим</option>
+                <option value="усложненный (интересные факты, требующие логики, но без зауми)">🔥 Умный режим (Тур 2)</option>
             </select>
             <button onclick="saveKey()">💾 Ключ</button>
             <br>
@@ -83,7 +83,13 @@
         let players = JSON.parse(localStorage.getItem('game_players')) || [{id: 1, name: 'Игрок 1', score: 0}];
         let gameData = []; let currentQ = null;
         let bleCharacteristic = null; let isButtonBlocked = false; let bleQueue = Promise.resolve();
-        const MODEL_NAME = 'gemini-2.5-flash-lite';
+        
+        // Используем самую стабильную модель
+        // Самая стабильная модель из новых с лимитом 500/день
+		const MODEL_NAME = 'gemini-3-flash-preview';
+		//const MODEL_NAME = 'gemini-3.1-flash-lite';
+		//const MODEL_NAME = 'gemma-4-31b';
+
 
         document.getElementById('apiKeyInput').value = API_KEY;
         renderPlayers();
@@ -97,7 +103,6 @@
         function addPlayer() {
             const name = document.getElementById('playerNameInput').value.trim() || `Игрок ${players.length + 1}`;
             players.push({ id: Date.now(), name: name, score: 0 });
-            sendBleCmd("A" + players.length);
             renderPlayers();
             document.getElementById('playerNameInput').value = '';
         }
@@ -119,36 +124,51 @@
             document.getElementById('playerSelector').innerHTML = players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         }
 
-        async function fullGameGenerate() {
-            if (!API_KEY) return alert("Введите ключ!");
-            const btn = document.getElementById('mainBtn');
-            const mode = document.getElementById('gameMode').value;
-            btn.innerText = '⌛ Генерация...'; btn.disabled = true;
 
-            const allThemes = ["Космос", "СССР", "Авто", "IT", "Мультфильмы", "Еда", "География", "Кино", "Наука", "Инструменты", "Животные", "История", "Музыка", "Бренды", "Спорт", "Авиация", "Химия", "Физика", "Роботы", "Игры", "Технологии"];
-            const selected = allThemes.sort(() => 0.5 - Math.random()).slice(0, 6).join(", ");
 
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
-            const prompt = `Викторина. Режим: ${mode}. 6 тем: ${selected}. Номиналы 10,20,30,40,50. Короткие ответы. JSON: [{"theme": "Название", "questions": [{"val": 10, "q": "Вопрос", "a": "Ответ"}, ...]}, ...]`;
+		async function fullGameGenerate() {
+			if (!API_KEY) return alert("Введите ключ!");
+			const btn = document.getElementById('mainBtn');
+			const mode = document.getElementById('gameMode').value;
+			btn.innerText = '⌛ Генерация...'; btn.disabled = true;
 
-            try {
-                const resp = await fetch(url, { method: 'POST', body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
-                const data = await resp.json();
-                let text = data.candidates[0].content.parts[0].text;
-                gameData = JSON.parse(text.substring(text.indexOf('['), text.lastIndexOf(']') + 1));
-                
-                const mods = ["ИНВЕРСИЯ", "РАСКУЛАЧИВАНИЕ", "СЕКРЕТНЫЙ ВОПРОС"];
-                mods.forEach(m => {
-                    let t = Math.floor(Math.random()*6);
-                    let q = Math.floor(Math.random()*5);
-                    gameData[t].questions[q].mod = m;
-                });
+			// Немного упростили темы для "Умного режима"
+			const allThemes = ["Космос", "СССР", "Авто", "Гаджеты", "Мультфильмы", "Еда", "География", "Кино", "Наука", "Животные", "История", "Музыка", "Бренды", "Спорт", "Игры"];
+			const selected = allThemes.sort(() => 0.5 - Math.random()).slice(0, 6).join(", ");
 
-                renderBoard();
-                document.getElementById('gameBoard').style.display = 'block';
-            } catch (e) { alert("Ошибка API"); }
-            finally { btn.innerText = '🚀 СОЗДАТЬ ИГРУ'; btn.disabled = false; }
-        }
+			// Важно: эта ссылка и модель точно работают
+			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+
+			const prompt = `Ты ведущий викторины. Сгенерируй игру. Темы: ${selected}. 
+			СЛОЖНОСТЬ: ${mode} (сделай интересно, но без зауми).
+			Верни ТОЛЬКО чистый JSON массив.
+			JSON формат: [{"theme": "Название", "questions": [{"val": 10, "q": "Вопрос", "a": "Ответ"}, ...]}, ...]`;
+
+			try {
+				const resp = await fetch(url, { 
+					method: 'POST', 
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) 
+				});
+				
+				const data = await resp.json();
+				if (data.error) throw new Error(data.error.message);
+
+				let text = data.candidates[0].content.parts[0].text;
+				
+				// Очистка JSON от лишнего
+				const startIdx = text.indexOf('[');
+				const endIdx = text.lastIndexOf(']') + 1;
+				gameData = JSON.parse(text.substring(startIdx, endIdx));
+				
+				renderBoard();
+				document.getElementById('gameBoard').style.display = 'block';
+			} catch (e) { 
+				console.error(e);
+				alert("Ошибка: " + e.message); 
+			}
+			finally { btn.innerText = '🚀 СОЗДАТЬ ИГРУ'; btn.disabled = false; }
+		}
 
         function openModal(tIdx, qIdx) {
             currentQ = gameData[tIdx].questions[qIdx];
@@ -171,7 +191,7 @@
                 modDisplay.innerText = "⚠️ МОДИФИКАТОР: " + currentQ.mod;
                 
                 if (currentQ.mod === "ИНВЕРСИЯ") {
-                    modDisplay.innerText += " (У выбранного игрока +/- поменяются местами)";
+                    modDisplay.innerText += " (Очки меняют знак +/-)";
                     qContent.style.display = 'none'; stdBtns.style.display = 'none'; refreshBtn.style.display = 'none';
                     modBtn.style.display = 'block'; modBtn.innerText = "🌀 ПРИМЕНИТЬ ИНВЕРСИЮ";
                     modBtn.onclick = () => { 
@@ -203,15 +223,16 @@
             const btn = document.getElementById('refreshBtn');
             btn.innerText = '⏳...';
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
-            const prompt = `Новый вопрос. Тема "${document.getElementById('modalTheme').innerText}", номинал ${currentQ.val}. JSON: {"q":"текст","a":"ответ"}`;
+            const prompt = `Замени вопрос. Тема: "${document.getElementById('modalTheme').innerText}", номинал ${currentQ.val}. Короткий ответ. JSON: {"q":"текст","a":"ответ"}`;
             try {
                 const resp = await fetch(url, { method: 'POST', body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
                 const data = await resp.json();
-                const newQ = JSON.parse(data.candidates[0].content.parts[0].text.replace(/```json|```/g, ""));
+                const text = data.candidates[0].content.parts[0].text;
+                const newQ = JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
                 currentQ.q = newQ.q; currentQ.a = newQ.a;
                 document.getElementById('modalQuestion').innerText = currentQ.q;
                 document.getElementById('ans').innerText = currentQ.a;
-            } catch (e) {} finally { btn.innerText = '🔄 ОБНОВИТЬ ВОПРОС'; }
+            } catch (e) { console.error(e); } finally { btn.innerText = '🔄 ОБНОВИТЬ ВОПРОС'; }
         }
 
         function handleScore(isCorrect) {
@@ -271,7 +292,7 @@
                         window.speechSynthesis.speak(new SpeechSynthesisUtterance(p.name));
                     }
                 });
-                alert("Кнопки OK!");
+                alert("Кнопки подключены!");
             } catch (e) { alert("Ошибка Bluetooth"); }
         }
 
