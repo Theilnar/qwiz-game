@@ -86,7 +86,7 @@
         
         // Используем самую стабильную модель
         // Самая стабильная модель из новых с лимитом 500/день
-		const MODEL_NAME = 'gemma-4-31b';
+		const MODEL_NAME = 'gemini-3-flash-preview';
 		//const MODEL_NAME = 'gemini-3.1-flash-lite';
 		//const MODEL_NAME = 'gemma-4-31b';
 
@@ -132,17 +132,25 @@
 			const mode = document.getElementById('gameMode').value;
 			btn.innerText = '⌛ Генерация...'; btn.disabled = true;
 
-			// Немного упростили темы для "Умного режима"
-			const allThemes = ["Космос", "СССР", "Авто", "Гаджеты", "Мультфильмы", "Еда", "География", "Кино", "Наука", "Животные", "История", "Музыка", "Бренды", "Спорт", "Игры"];
+			const allThemes = [
+				"Космос", "СССР", "Авто", "Гаджеты", "Мультфильмы", "Еда", "География", 
+				"Кино", "Наука", "Животные", "История", "Музыка", "Бренды", "Спорт", "Игры",
+				"Мемы и Тренды", "Золотой фонд цитат", "Люди-X (Суперсилы)", "Премия Дарвина",
+				"Безумный DIY", "Трудности перевода", "Каламбуры", "Городские легенды",
+				"Ретро-интернет", "Странная реклама", "Мифология", "В мире ИТ"
+			];
 			const selected = allThemes.sort(() => 0.5 - Math.random()).slice(0, 6).join(", ");
 
-			// Важно: эта ссылка и модель точно работают
-			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+			const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`;
 
-			const prompt = `Ты ведущий викторины. Сгенерируй игру. Темы: ${selected}. 
-			СЛОЖНОСТЬ: ${mode} (сделай интересно, но без зауми).
+			// Промпт настроен на малые номиналы (10-50)
+			const prompt = `Ты ведущий викторины "Своя Игра". Сгенерируй пакет из 6 тем.
+			Темы: ${selected}. СЛОЖНОСТЬ: ${mode}.
+			В каждой теме ровно 5 вопросов с номиналами: 10, 20, 30, 40, 50 баллов.
+			Всего в игре добавь ровно 3 случайных вопроса с модификатором "mod".
+			Доступные mod: "ИНВЕРСИЯ" (очки меняют знак), "РАСКУЛАЧИВАНИЕ" (лидер отдает 15 баллов аутсайдеру).
 			Верни ТОЛЬКО чистый JSON массив.
-			JSON формат: [{"theme": "Название", "questions": [{"val": 10, "q": "Вопрос", "a": "Ответ"}, ...]}, ...]`;
+			Формат: [{"theme": "Название", "questions": [{"val": 10, "q": "Вопрос", "a": "Ответ", "mod": "название_если_есть"}, ...]}, ...]`;
 
 			try {
 				const resp = await fetch(url, { 
@@ -155,8 +163,6 @@
 				if (data.error) throw new Error(data.error.message);
 
 				let text = data.candidates[0].content.parts[0].text;
-				
-				// Очистка JSON от лишнего
 				const startIdx = text.indexOf('[');
 				const endIdx = text.lastIndexOf(']') + 1;
 				gameData = JSON.parse(text.substring(startIdx, endIdx));
@@ -198,16 +204,16 @@
                         let p = players.find(x => x.id == document.getElementById('playerSelector').value);
                         p.score *= -1; currentQ.done = true; closeModal(); renderPlayers(); renderBoard();
                     };
-                } else if (currentQ.mod === "РАСКУЛАЧИВАНИЕ") {
-                    modDisplay.innerText += " (Лидер отдает 50 очков аутсайдеру)";
-                    qContent.style.display = 'none'; stdBtns.style.display = 'none'; refreshBtn.style.display = 'none';
-                    modBtn.style.display = 'block'; modBtn.innerText = "💸 ПЕРЕВЕСТИ БАЛЛЫ";
-                    modBtn.onclick = () => {
-                        let sorted = [...players].sort((a,b) => b.score - a.score);
-                        if(sorted.length > 1) { sorted[0].score -= 50; sorted[sorted.length-1].score += 50; }
-                        currentQ.done = true; closeModal(); renderPlayers(); renderBoard();
-                    };
-                }
+				} else if (currentQ.mod === "РАСКУЛАЧИВАНИЕ") {
+					modDisplay.innerText += " (Лидер отдает 15 очков аутсайдеру)";
+					qContent.style.display = 'none'; stdBtns.style.display = 'none'; refreshBtn.style.display = 'none';
+					modBtn.style.display = 'block'; modBtn.innerText = "💸 ПЕРЕВЕСТИ БАЛЛЫ";
+					modBtn.onclick = () => {
+						let sorted = [...players].sort((a,b) => b.score - a.score);
+						if(sorted.length > 1) { sorted[0].score -= 15; sorted[sorted.length-1].score += 15; }
+						currentQ.done = true; closeModal(); renderPlayers(); renderBoard();
+					};
+				}
             }
 
             document.getElementById('modalTheme').innerText = gameData[tIdx].theme;
