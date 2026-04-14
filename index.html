@@ -188,7 +188,7 @@
 			const allPossibleThemes = ["Космос", "Автомобили", "Наука", "Инструменты", "Электрика", "Игры", "Кино", "История", "География", "Животные", "Музыка", "СССР", "Роботы", "Динозавры", "Оружие", "Поезда", "Авиация", "Химия", "Физика", "Технологии"];
 			const selectedThemes = allPossibleThemes.sort(() => 0.5 - Math.random()).slice(0, 6).join(", ");
 
-			const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${API_KEY}`;
+			const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 			const prompt = `Генерация игры "Своя Игра". Сделай 6 тем по 5 вопросов (100-500). ТЕМЫ: ${selectedThemes}. Короткие ответы. JSON массив: [{"theme": "Название", "questions": [{"val": 100, "q": "Вопрос", "a": "Ответ"}, ...]}, ...]`;
 
 			try {
