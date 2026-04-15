@@ -2,251 +2,249 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Свояк ИИ 2.9.2 - Balanced Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Свояк ИИ 2.9.3 - ESP32 Edition</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #0b0e14; color: #e0e0e0; text-align: center; padding: 20px; margin: 0; }
-        .container { max-width: 1100px; margin: 0 auto; }
-        .card { background: #161b22; border-radius: 12px; padding: 20px; margin: 15px auto; border: 1px solid #30363d; }
-        button { background: #238636; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; margin: 5px; transition: 0.2s; }
-        button:hover { opacity: 0.8; }
-        button.delete-btn { background: #da3633; padding: 2px 8px; font-size: 11px; margin-left: 10px; border-radius: 4px; }
-        button.modifier-action { background: #d29922; color: #000; width: 100%; font-size: 18px; margin-top: 10px; }
-        input, select { padding: 10px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: white; margin: 5px; }
-        .themes-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 20px 0; }
-        .theme-column { background: #0d1117; border-radius: 8px; padding: 10px; border: 1px solid #30363d; }
-        .theme-title { font-size: 11px; font-weight: 800; color: #58a6ff; min-height: 45px; display: flex; align-items: center; justify-content: center; text-transform: uppercase; }
-        .question-cell { background: #161b22; border: 1px solid #30363d; border-radius: 4px; padding: 15px 5px; margin: 5px 0; font-size: 24px; font-weight: bold; cursor: pointer; color: #d29922; }
-        .question-cell.answered { color: #484f58; opacity: 0.3; pointer-events: none; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); justify-content: center; align-items: center; z-index: 1000; }
-        .modal.active { display: flex; }
-        .modal-content { background: #161b22; border-radius: 12px; padding: 30px; max-width: 600px; width: 90%; border: 1px solid #30363d; }
-        .modifier-info { background: #f2cc60; color: #000; padding: 15px; border-radius: 8px; font-weight: bold; margin-bottom: 15px; border: 2px solid #d29922; }
-        .player-card { background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 10px; display: flex; align-items: center; justify-content: space-between; min-width: 150px; }
+        :root { --bg:#0b0e14; --panel:#161b22; --panel-alt:#0d1117; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#d29922; --blue:#58a6ff; --green:#238636; --green-bright:#3fb950; --red:#da3633; --violet:#8b5cf6; }
+        * { box-sizing: border-box; }
+        body { font-family:"Segoe UI",sans-serif; background:radial-gradient(circle at top,#121826 0%,var(--bg) 55%); color:var(--text); text-align:center; padding:20px; margin:0; }
+        .container { max-width:1100px; margin:0 auto; }
+        .card { background:rgba(22,27,34,.96); border-radius:12px; padding:20px; margin:15px auto; border:1px solid var(--border); }
+        button { background:var(--green); color:#fff; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:600; margin:5px; transition:transform .15s ease,opacity .2s ease; }
+        button:hover { opacity:.88; transform:translateY(-1px); }
+        button:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+        button.delete-btn { background:var(--red); padding:2px 8px; font-size:11px; margin-left:10px; border-radius:4px; }
+        button.modifier-action { background:var(--accent); color:#000; width:100%; font-size:18px; margin-top:10px; }
+        input, select { padding:10px; border-radius:6px; border:1px solid var(--border); background:var(--panel-alt); color:#fff; margin:5px; }
+        .themes-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin:20px 0; }
+        .theme-column { background:var(--panel-alt); border-radius:8px; padding:10px; border:1px solid var(--border); }
+        .theme-title { font-size:11px; font-weight:800; color:var(--blue); min-height:45px; display:flex; align-items:center; justify-content:center; text-transform:uppercase; }
+        .question-cell { background:var(--panel); border:1px solid var(--border); border-radius:4px; padding:15px 5px; margin:5px 0; font-size:24px; font-weight:bold; cursor:pointer; color:var(--accent); }
+        .question-cell.answered { color:#484f58; opacity:.3; pointer-events:none; }
+        .modal { display:none; position:fixed; inset:0; width:100%; height:100%; background:rgba(0,0,0,.95); justify-content:center; align-items:center; z-index:1000; padding:20px; }
+        .modal.active { display:flex; }
+        .modal-content { background:var(--panel); border-radius:12px; padding:30px; max-width:680px; width:100%; border:1px solid var(--border); }
+        .modifier-info { background:#f2cc60; color:#000; padding:15px; border-radius:8px; font-weight:bold; margin-bottom:15px; border:2px solid var(--accent); }
+        .player-list { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
+        .player-card { background:#21262d; border:1px solid var(--border); border-radius:8px; padding:10px; display:flex; align-items:center; justify-content:space-between; min-width:160px; transition:box-shadow .15s ease,border-color .15s ease; }
+        .player-card.active { box-shadow:0 0 20px rgba(35,134,54,.55); border:2px solid var(--green); }
+        .status-line { color:var(--muted); margin-top:8px; min-height:20px; }
+        @media (max-width:900px) { .themes-grid { grid-template-columns:repeat(3,1fr); } }
+        @media (max-width:640px) { .themes-grid { grid-template-columns:repeat(2,1fr); } .modal-content { padding:20px; } }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎮 Свояк: Сборка 2.9.2 (Balanced)</h1>
-        
+        <h1>Свояк: Сборка 2.9.3 (ESP32 Edition)</h1>
         <div class="card">
-            <input type="password" id="apiKeyInput" placeholder="Gemini API Key" style="width: 180px;">
+            <input type="password" id="apiKeyInput" placeholder="Gemini API Key" style="width:190px;">
             <select id="gameMode">
-                <option value="детский (простые и веселые темы для детей)">👶 Детский режим</option>
-                <option value="средний (классический Свояк, общие знания)" selected>👨 Обычный режим</option>
-                <option value="усложненный (интересные факты, требующие логики, но без зауми)">🔥 Умный режим (Тур 2)</option>
+                <option value="детский (простые и веселые темы для детей)">Детский режим</option>
+                <option value="средний (классический Свояк, общие знания)" selected>Обычный режим</option>
+                <option value="усложненный (интересные факты, требующие логики, но без зауми)">Умный режим</option>
             </select>
-            <button onclick="saveKey()">💾 Ключ</button>
+            <button onclick="saveKey()">Сохранить ключ</button>
             <br>
             <input type="text" id="playerNameInput" placeholder="Имя игрока">
-            <button onclick="addPlayer()" style="background: #1f6feb;">➕ Игрок</button>
-            <button onclick="fullGameGenerate()" id="mainBtn" style="background: #238636;">🚀 СОЗДАТЬ ИГРУ</button>
-            <button onclick="connectBluetooth()" style="background: #8b5cf6;">🔌 КНОПКИ</button>
+            <button onclick="addPlayer()" style="background:#1f6feb;">Добавить игрока</button>
+            <button onclick="fullGameGenerate()" id="mainBtn">Создать игру</button>
+            <button onclick="connectBluetooth()" style="background:var(--violet);">Подключить кнопки</button>
+            <div class="status-line" id="statusLine">Можно играть и без ESP32, выбор игрока останется ручным.</div>
         </div>
-
-        <div id="playersList" style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;"></div>
-
-        <div id="gameBoard" style="display: none;" class="card">
-            <div id="themesGrid" class="themes-grid"></div>
-        </div>
-
+        <div id="playersList" class="player-list"></div>
+        <div id="gameBoard" style="display:none;" class="card"><div id="themesGrid" class="themes-grid"></div></div>
         <div id="questionModal" class="modal">
             <div class="modal-content">
                 <div id="modDisplay" class="modifier-info" style="display:none;"></div>
-                <div id="modalTheme" style="color: #58a6ff;"></div>
-                <div id="modalValue" style="color: #d29922; font-size: 32px;"></div>
-                
+                <div id="modalTheme" style="color:var(--blue);"></div>
+                <div id="modalValue" style="color:var(--accent); font-size:32px;"></div>
                 <div id="qContent">
-                    <div id="modalQuestion" style="font-size: 22px; margin: 20px 0;"></div>
-                    <button onclick="document.getElementById('ans').style.display='block'" style="width: 100%; background: #30363d;">ПОКАЗАТЬ ОТВЕТ</button>
-                    <div id="ans" style="display:none; color: #3fb950; padding: 15px; font-size: 20px; font-weight: bold; border: 1px dashed #238636; margin: 10px 0;"></div>
+                    <div id="modalQuestion" style="font-size:22px; margin:20px 0;"></div>
+                    <button onclick="showAnswer()" style="width:100%; background:#30363d;">Показать ответ</button>
+                    <div id="ans" style="display:none; color:var(--green-bright); padding:15px; font-size:20px; font-weight:bold; border:1px dashed var(--green); margin:10px 0;"></div>
                 </div>
-
-                <div id="scoringZone" style="margin-top: 20px; border-top: 1px solid #30363d; padding-top: 15px;">
-                    <label>Выбор игрока:</label><br>
-                    <select id="playerSelector" style="width: 80%;"></select>
-                    
-                    <div id="standardButtons" style="display: flex; gap: 10px; margin-top: 10px;">
-                        <button onclick="handleScore(true)" style="background: #238636; flex: 1;">✅ ПРАВИЛЬНО</button>
-                        <button onclick="handleScore(false)" style="background: #da3633; flex: 1;">❌ ОШИБКА</button>
+                <div id="scoringZone" style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px;">
+                    <label for="playerSelector">Выбор игрока:</label><br>
+                    <select id="playerSelector" style="width:80%;"></select>
+                    <div id="standardButtons" style="display:flex; gap:10px; margin-top:10px;">
+                        <button onclick="handleScore(true)" style="background:var(--green); flex:1;">Правильно</button>
+                        <button onclick="handleScore(false)" style="background:var(--red); flex:1;">Ошибка</button>
                     </div>
-                    
                     <button id="modButton" class="modifier-action" style="display:none;"></button>
-                    <button onclick="refreshSingleQuestion()" id="refreshBtn" style="background: #1f6feb; width: 100%; margin-top: 10px;">🔄 ОБНОВИТЬ ВОПРОС</button>
+                    <button onclick="refreshSingleQuestion()" id="refreshBtn" style="background:#1f6feb; width:100%; margin-top:10px;">Обновить вопрос</button>
                 </div>
-                <button onclick="closeModal()" style="background: none; color: #8b949e; margin-top: 15px;">Закрыть</button>
+                <button onclick="closeModal()" style="background:none; color:var(--muted); margin-top:15px;">Закрыть</button>
             </div>
         </div>
     </div>
-
     <script>
-		let API_KEY = localStorage.getItem('gemini_key') || '';
-        let players = JSON.parse(localStorage.getItem('game_players')) || [{id: 1, name: 'Игрок 1', score: 0}];
-        let gameData = []; let currentQ = null;
-        let bleCharacteristic = null; let isButtonBlocked = false; let bleQueue = Promise.resolve();
-        
-        const MODEL_NAME = 'gemini-1.5-flash'; // Стабильная и быстрая
-
-        document.getElementById('apiKeyInput').value = API_KEY;
+        let API_KEY = localStorage.getItem("gemini_key") || "";
+        let players = JSON.parse(localStorage.getItem("game_players")) || [{ id: 1, name: "Игрок 1", score: 0 }];
+        let gameData = [];
+        let currentQ = null;
+        let currentThemeIndex = null;
+        let currentQuestionIndex = null;
+        let bleCharacteristic = null;
+        let isButtonBlocked = false;
+        let bleQueue = Promise.resolve();
+		const MODEL_NAME = "gemini-3-flash-preview";
+        //const MODEL_NAME = "gemini-1.5-flash";
+        const MAX_BLE_PLAYERS = 3;
+        const QUESTION_VALUES = [10, 20, 30, 40, 50];
+        const ALL_THEMES = ["Космос", "СССР", "Авто", "Гаджеты", "Мультфильмы", "Еда", "География", "Кино", "Наука", "Животные", "История", "Музыка", "Бренды", "Спорт", "Игры", "Люди-X (Суперсилы)", "Премия Дарвина", "Безумный DIY", "Трудности перевода", "Каламбуры", "Городские легенды", "Ретро-интернет", "Странная реклама", "Мифология"];
+        document.getElementById("apiKeyInput").value = API_KEY;
         renderPlayers();
-
-        function saveKey() {
-            API_KEY = document.getElementById('apiKeyInput').value;
-            localStorage.setItem('gemini_key', API_KEY);
-            alert('Ключ сохранен');
-        }
-
+        function setStatus(text) { document.getElementById("statusLine").innerText = text; }
+        function saveKey() { API_KEY = document.getElementById("apiKeyInput").value.trim(); localStorage.setItem("gemini_key", API_KEY); alert("Ключ сохранен"); }
         function addPlayer() {
-            const name = document.getElementById('playerNameInput').value.trim() || `Игрок ${players.length + 1}`;
-            players.push({ id: Date.now(), name: name, score: 0 });
+            if (players.length >= MAX_BLE_PLAYERS) { alert(`Сейчас поддерживается максимум ${MAX_BLE_PLAYERS} игрока под ESP32-кнопки.`); return; }
+            const name = document.getElementById("playerNameInput").value.trim() || `Игрок ${players.length + 1}`;
+            players.push({ id: Date.now(), name, score: 0 });
             renderPlayers();
-            document.getElementById('playerNameInput').value = '';
+            document.getElementById("playerNameInput").value = "";
         }
-
         function removePlayer(id) {
-            if (players.length <= 1) return alert("Минимум 1 игрок!");
-            players = players.filter(p => p.id !== id);
+            if (players.length <= 1) { alert("Минимум 1 игрок!"); return; }
+            players = players.filter((p) => p.id !== id);
+            clearPlayerHighlights();
             renderPlayers();
         }
-
         function renderPlayers() {
-            localStorage.setItem('game_players', JSON.stringify(players));
-            document.getElementById('playersList').innerHTML = players.map((p, idx) => `
-                <div class="player-card" id="player-card-${p.id}">
-                    <div><b>${p.name}</b>: <span style="color:#d29922">${p.score}</span></div>
-                    <button class="delete-btn" onclick="removePlayer(${p.id})">❌</button>
-                </div>
-            `).join('');
-            document.getElementById('playerSelector').innerHTML = players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+            localStorage.setItem("game_players", JSON.stringify(players));
+            document.getElementById("playersList").innerHTML = players.map((p, idx) => `<div class="player-card" id="player-card-${p.id}"><div><b>${escapeHtml(p.name)}</b>: <span style="color:var(--accent)">${p.score}</span>${idx < MAX_BLE_PLAYERS ? "" : " <small>(без кнопки)</small>"}</div><button class="delete-btn" onclick="removePlayer(${p.id})">x</button></div>`).join("");
+            document.getElementById("playerSelector").innerHTML = players.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
         }
-
+        function clearPlayerHighlights() { document.querySelectorAll(".player-card").forEach((card) => card.classList.remove("active")); }
+        function highlightPlayer(playerId) { clearPlayerHighlights(); const card = document.getElementById(`player-card-${playerId}`); if (card) card.classList.add("active"); }
+        function shuffle(array) { const copy = [...array]; for (let i = copy.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); [copy[i], copy[j]] = [copy[j], copy[i]]; } return copy; }
+        function buildPrompt(selectedThemes, mode) {
+            return ['Ты ведущий викторины "Своя Игра".', `Сгенерируй пакет из 6 тем. Темы: ${selectedThemes}.`, `Сложность: ${mode}.`, "В каждой теме ровно 5 вопросов с номиналами 10, 20, 30, 40, 50.", 'Добавь ровно 3 случайных вопроса с модификатором "mod": "ИНВЕРСИЯ" или "РАСКУЛАЧИВАНИЕ".', "Вопросы должны быть короткими, понятными и без двусмысленности.", 'Верни только JSON-массив формата [{"theme":"Название","questions":[{"val":10,"q":"Вопрос","a":"Ответ","mod":null}]}].'].join(" ");
+        }
         async function fullGameGenerate() {
-            if (!API_KEY) return alert("Введите ключ!");
-            const btn = document.getElementById('mainBtn');
-            const mode = document.getElementById('gameMode').value;
-            btn.innerText = '⌛ Генерация...'; btn.disabled = true;
-
-            const allThemes = [
-                "Космос", "СССР", "Авто", "Гаджеты", "Мультфильмы", "Еда", "География", 
-                "Кино", "Наука", "Животные", "История", "Музыка", "Бренды", "Спорт", "Игры",
-                "Люди-X (Суперсилы)", "Премия Дарвина", "Безумный DIY", "Трудности перевода", 
-                "Каламбуры", "Городские легенды", "Ретро-интернет", "Странная реклама", "Мифология"
-            ];
-            const selected = allThemes.sort(() => 0.5 - Math.random()).slice(0, 6).join(", ");
-
+            if (!API_KEY) { alert("Введите ключ!"); return; }
+            const btn = document.getElementById("mainBtn");
+            const mode = document.getElementById("gameMode").value;
+            btn.innerText = "Генерация...";
+            btn.disabled = true;
+            setStatus("Генерирую пакет вопросов...");
+            const selected = shuffle(ALL_THEMES).slice(0, 6).join(", ");
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`;
-
-            const prompt = `Ты ведущий викторины "Своя Игра". Сгенерируй пакет из 6 тем.
-            Темы: ${selected}. СЛОЖНОСТЬ: ${mode}.
-            В каждой теме ровно 5 вопросов с номиналами: 10, 20, 30, 40, 50 баллов.
-            Добавь ровно 3 случайных вопроса с модификатором "mod": "ИНВЕРСИЯ" или "РАСКУЛАЧИВАНИЕ".
-            Верни ТОЛЬКО чистый JSON массив: [{"theme": "Название", "questions": [{"val": 10, "q": "Вопрос", "a": "Ответ", "mod": null}, ...]}]`;
-
+            const prompt = buildPrompt(selected, mode);
             try {
-                const resp = await fetch(url, { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) 
-                });
-                
+                const resp = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] }) });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const data = await resp.json();
-                let text = data.candidates[0].content.parts[0].text;
-                gameData = JSON.parse(text.substring(text.indexOf('['), text.lastIndexOf(']') + 1));
-                
+                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                const parsed = extractJsonArray(text);
+                gameData = validateGameData(parsed);
                 renderBoard();
-                document.getElementById('gameBoard').style.display = 'block';
-            } catch (e) { 
-                alert("Ошибка генерации. Попробуйте еще раз."); 
-            } finally { 
-                btn.innerText = '🚀 СОЗДАТЬ ИГРУ'; btn.disabled = false; 
+                document.getElementById("gameBoard").style.display = "block";
+                setStatus("Игра готова. Можно открывать вопросы.");
+            } catch (error) {
+                console.error(error);
+                alert("Ошибка генерации. Попробуйте еще раз.");
+                setStatus("Генерация не удалась. Проверьте ключ и повторите.");
+            } finally {
+                btn.innerText = "Создать игру";
+                btn.disabled = false;
             }
         }
-
+        function extractJsonArray(text) {
+            const start = text.indexOf("[");
+            const end = text.lastIndexOf("]");
+            if (start === -1 || end === -1 || end <= start) throw new Error("JSON array not found");
+            return JSON.parse(text.slice(start, end + 1));
+        }
+        function validateGameData(data) {
+            if (!Array.isArray(data) || data.length !== 6) throw new Error("Expected 6 themes");
+            let modifierCount = 0;
+            const normalized = data.map((theme) => {
+                if (!theme || typeof theme.theme !== "string" || !Array.isArray(theme.questions) || theme.questions.length !== 5) throw new Error("Invalid theme structure");
+                const vals = theme.questions.map((q) => Number(q.val)).sort((a, b) => a - b);
+                if (JSON.stringify(vals) !== JSON.stringify(QUESTION_VALUES)) throw new Error("Invalid question values");
+                const questions = theme.questions.map((q) => ({ val:Number(q.val), q:String(q.q || "").trim(), a:String(q.a || "").trim(), mod:q.mod === "ИНВЕРСИЯ" || q.mod === "РАСКУЛАЧИВАНИЕ" ? q.mod : null, done:false })).sort((a, b) => a.val - b.val);
+                questions.forEach((q) => { if (!q.q || !q.a) throw new Error("Empty question or answer"); if (q.mod) modifierCount += 1; });
+                return { theme: theme.theme.trim(), questions };
+            });
+            if (modifierCount !== 3) throw new Error("Expected exactly 3 modifiers");
+            return normalized;
+        }
         function openModal(tIdx, qIdx) {
+            currentThemeIndex = tIdx;
+            currentQuestionIndex = qIdx;
             currentQ = gameData[tIdx].questions[qIdx];
             if (currentQ.done) return;
-            
-            // Сброс подсветки игроков
-            document.querySelectorAll('.player-card').forEach(c => c.style.boxShadow = 'none');
-
-            const modDisplay = document.getElementById('modDisplay');
-            const qContent = document.getElementById('qContent');
-            const stdBtns = document.getElementById('standardButtons');
-            const modBtn = document.getElementById('modButton');
-
-            modDisplay.style.display = 'none';
-            qContent.style.display = 'block';
-            stdBtns.style.display = 'flex';
-            modBtn.style.display = 'none';
-
+            clearPlayerHighlights();
+            const modDisplay = document.getElementById("modDisplay");
+            const qContent = document.getElementById("qContent");
+            const stdBtns = document.getElementById("standardButtons");
+            const modBtn = document.getElementById("modButton");
+            modDisplay.style.display = "none"; qContent.style.display = "block"; stdBtns.style.display = "flex"; modBtn.style.display = "none";
             if (currentQ.mod) {
-                modDisplay.style.display = 'block';
-                modDisplay.innerText = "⚠️ МОДИФИКАТОР: " + currentQ.mod;
-                
+                modDisplay.style.display = "block";
+                modDisplay.innerText = `МОДИФИКАТОР: ${currentQ.mod}`;
                 if (currentQ.mod === "ИНВЕРСИЯ") {
-                    qContent.style.display = 'none'; stdBtns.style.display = 'none';
-                    modBtn.style.display = 'block'; modBtn.innerText = "🌀 ПРИМЕНИТЬ ИНВЕРСИЮ";
-                    modBtn.onclick = () => { 
-                        let p = players.find(x => x.id == document.getElementById('playerSelector').value);
-                        p.score *= -1; finalizeQuestion();
-                    };
+                    qContent.style.display = "none"; stdBtns.style.display = "none"; modBtn.style.display = "block"; modBtn.innerText = "Применить инверсию";
+                    modBtn.onclick = () => { const player = getSelectedPlayer(); if (!player) return; player.score *= -1; finalizeQuestion(); };
                 } else if (currentQ.mod === "РАСКУЛАЧИВАНИЕ") {
-                    qContent.style.display = 'none'; stdBtns.style.display = 'none';
-                    modBtn.style.display = 'block'; modBtn.innerText = "💸 ПЕРЕВЕСТИ 15 БАЛЛОВ";
-                    modBtn.onclick = () => {
-                        let sorted = [...players].sort((a,b) => b.score - a.score);
-                        if(sorted.length > 1) { sorted[0].score -= 15; sorted[sorted.length-1].score += 15; }
-                        finalizeQuestion();
-                    };
+                    qContent.style.display = "none"; stdBtns.style.display = "none"; modBtn.style.display = "block"; modBtn.innerText = "Перевести 15 баллов";
+                    modBtn.onclick = () => { const sorted = [...players].sort((a, b) => b.score - a.score); if (sorted.length > 1) { sorted[0].score -= 15; sorted[sorted.length - 1].score += 15; } finalizeQuestion(); };
                 }
             }
-
-            document.getElementById('modalTheme').innerText = gameData[tIdx].theme;
-            document.getElementById('modalValue').innerText = currentQ.val;
-            document.getElementById('modalQuestion').innerText = currentQ.q;
-            document.getElementById('ans').innerText = currentQ.a;
-            document.getElementById('ans').style.display = 'none';
-            document.getElementById('questionModal').classList.add('active');
+            document.getElementById("modalTheme").innerText = gameData[tIdx].theme;
+            document.getElementById("modalValue").innerText = currentQ.val;
+            document.getElementById("modalQuestion").innerText = currentQ.q;
+            document.getElementById("ans").innerText = currentQ.a;
+            document.getElementById("ans").style.display = "none";
+            document.getElementById("questionModal").classList.add("active");
             isButtonBlocked = false;
-            sendBleCmd("C0"); // Сброс кнопок на ESP32
+            sendBleCmd("C0");
+            setStatus("Вопрос открыт. Ожидаю ответ игрока.");
         }
-
+        function showAnswer() { document.getElementById("ans").style.display = "block"; }
+        function getSelectedPlayer() {
+            const pId = document.getElementById("playerSelector").value;
+            const player = players.find((p) => String(p.id) === String(pId));
+            if (!player) { alert("Игрок не выбран"); return null; }
+            return player;
+        }
         function handleScore(isCorrect) {
-            const pId = document.getElementById('playerSelector').value;
-            const pIdx = players.findIndex(p => p.id == pId);
-            const p = players[pIdx];
-            if (!p) return;
-
+            const player = getSelectedPlayer();
+            if (!player || !currentQ) return;
+            const pIdx = players.findIndex((p) => p.id === player.id);
             if (isCorrect) {
-                p.score += currentQ.val;
-                sendBleCmd("W" + (pIdx + 1)); // Win light
+                player.score += currentQ.val;
+                sendBleCmd(`W${pIdx + 1}`);
                 finalizeQuestion();
             } else {
-                p.score -= currentQ.val;
-                sendBleCmd("E" + (pIdx + 1)); // Error light
-                isButtonBlocked = false; // Даем шанс другим
-                document.getElementById(`player-card-${p.id}`).style.boxShadow = 'none';
+                player.score -= currentQ.val;
+                sendBleCmd(`E${pIdx + 1}`);
+                isButtonBlocked = false;
+                clearPlayerHighlights();
+                renderPlayers();
+                highlightPlayer(player.id);
+                setStatus("Ошибка засчитана. Остальные игроки могут нажимать.");
             }
             renderPlayers();
         }
-
         function finalizeQuestion() {
+            if (!currentQ) return;
             currentQ.done = true;
             renderPlayers();
             renderBoard();
-            setTimeout(() => {
-                closeModal();
-                checkGameOver();
-            }, 1000);
+            setStatus("Вопрос закрыт.");
+            setTimeout(() => { closeModal(); checkGameOver(); }, 900);
         }
-
         function renderBoard() {
-            const grid = document.getElementById('themesGrid'); grid.innerHTML = '';
-            gameData.forEach((t, tIdx) => {
-                const col = document.createElement('div'); col.className = 'theme-column';
-                col.innerHTML = `<div class="theme-title">${t.theme}</div>`;
-                t.questions.forEach((q, qIdx) => {
-                    const cell = document.createElement('div');
-                    cell.className = 'question-cell' + (q.done ? ' answered' : '');
+            const grid = document.getElementById("themesGrid");
+            grid.innerHTML = "";
+            gameData.forEach((theme, tIdx) => {
+                const col = document.createElement("div");
+                col.className = "theme-column";
+                col.innerHTML = `<div class="theme-title">${escapeHtml(theme.theme)}</div>`;
+                theme.questions.forEach((q, qIdx) => {
+                    const cell = document.createElement("div");
+                    cell.className = `question-cell${q.done ? " answered" : ""}`;
                     cell.innerText = q.val;
                     cell.onclick = () => openModal(tIdx, qIdx);
                     col.appendChild(cell);
@@ -254,58 +252,94 @@
                 grid.appendChild(col);
             });
         }
-
         function checkGameOver() {
-            const remaining = gameData.flatMap(t => t.questions).filter(q => !q.done).length;
+            const remaining = gameData.flatMap((t) => t.questions).filter((q) => !q.done).length;
             if (remaining === 0) {
                 const winner = [...players].sort((a, b) => b.score - a.score)[0];
-                alert(`🎉 ИГРА ОКОНЧЕНА!\n🏆 Победитель: ${winner.name} со счетом ${winner.score}`);
+                alert(`Игра окончена!\nПобедитель: ${winner.name} со счетом ${winner.score}`);
+                setStatus(`Победитель: ${winner.name}, счет ${winner.score}.`);
             }
         }
-
-        // Bluetooth и Авто-выбор
+        async function refreshSingleQuestion() {
+            if (!currentQ || currentThemeIndex === null || currentQuestionIndex === null) { alert("Сначала откройте вопрос."); return; }
+            if (!API_KEY) { alert("Введите ключ!"); return; }
+            const refreshBtn = document.getElementById("refreshBtn");
+            refreshBtn.disabled = true;
+            refreshBtn.innerText = "Обновляю...";
+            setStatus("Пробую перегенерировать один вопрос...");
+            const mode = document.getElementById("gameMode").value;
+            const themeName = gameData[currentThemeIndex].theme;
+            const value = currentQ.val;
+            const hasModifier = currentQ.mod;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`;
+            const prompt = ['Ты ведущий викторины "Своя Игра".', `Создай ОДИН новый вопрос для темы "${themeName}".`, `Номинал: ${value}. Сложность: ${mode}.`, `Модификатор должен быть ${hasModifier ? `"${hasModifier}"` : "null"}.`, 'Верни только JSON-объект вида {"val":10,"q":"Вопрос","a":"Ответ","mod":null}.'].join(" ");
+            try {
+                const resp = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] }) });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                const newQuestion = extractJsonObject(text);
+                if (Number(newQuestion.val) !== value) throw new Error("Value mismatch");
+                currentQ.q = String(newQuestion.q || "").trim();
+                currentQ.a = String(newQuestion.a || "").trim();
+                currentQ.mod = hasModifier ? hasModifier : null;
+                if (!currentQ.q || !currentQ.a) throw new Error("Empty generated question");
+                document.getElementById("modalQuestion").innerText = currentQ.q;
+                document.getElementById("ans").innerText = currentQ.a;
+                document.getElementById("ans").style.display = "none";
+                setStatus("Вопрос обновлен.");
+            } catch (error) {
+                console.error(error);
+                alert("Не удалось обновить вопрос.");
+                setStatus("Обновление вопроса не удалось.");
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.innerText = "Обновить вопрос";
+            }
+        }
+        function extractJsonObject(text) {
+            const start = text.indexOf("{");
+            const end = text.lastIndexOf("}");
+            if (start === -1 || end === -1 || end <= start) throw new Error("JSON object not found");
+            return JSON.parse(text.slice(start, end + 1));
+        }
         async function connectBluetooth() {
             try {
-                const device = await navigator.bluetooth.requestDevice({ 
-                    filters: [{ name: 'Svoyak_Buttons' }], 
-                    optionalServices: ["4fafc201-1fb5-459e-8fcc-c5c9c331914b"] 
-                });
+                const device = await navigator.bluetooth.requestDevice({ filters:[{ name:"Svoyak_Buttons" }], optionalServices:["4fafc201-1fb5-459e-8fcc-c5c9c331914b"] });
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
                 bleCharacteristic = await service.getCharacteristic("beb5483e-36e1-4688-b7f5-ea07361b26a8");
                 await bleCharacteristic.startNotifications();
-                
-                bleCharacteristic.addEventListener('characteristicvaluechanged', (e) => {
-                    if (isButtonBlocked) return;
-                    const val = new TextDecoder().decode(e.target.value);
-                    const pIdx = parseInt(val) - 1;
-                    const p = players[pIdx];
-                    
-                    if (p) {
+                bleCharacteristic.addEventListener("characteristicvaluechanged", (event) => {
+                    if (isButtonBlocked || !currentQ) return;
+                    const val = new TextDecoder().decode(event.target.value).trim();
+                    const pIdx = parseInt(val, 10) - 1;
+                    const player = players[pIdx];
+                    if (Number.isInteger(pIdx) && player) {
                         isButtonBlocked = true;
-                        // 1. Авто-выбор в селекторе
-                        document.getElementById('playerSelector').value = p.id;
-                        // 2. Визуальная подсветка карточки
-                        document.querySelectorAll('.player-card').forEach(c => c.style.boxShadow = 'none');
-                        const card = document.getElementById(`player-card-${p.id}`);
-                        card.style.boxShadow = '0 0 20px #238636';
-                        card.style.border = '2px solid #238636';
-                        // 3. Озвучка
-                        window.speechSynthesis.speak(new SpeechSynthesisUtterance(p.name));
+                        document.getElementById("playerSelector").value = player.id;
+                        highlightPlayer(player.id);
+                        if (window.speechSynthesis) {
+                            window.speechSynthesis.cancel();
+                            window.speechSynthesis.speak(new SpeechSynthesisUtterance(player.name));
+                        }
+                        setStatus(`Первым нажал: ${player.name}`);
                     }
                 });
+                setStatus("ESP32-кнопки подключены.");
                 alert("Кнопки подключены!");
-            } catch (e) { alert("Ошибка Bluetooth"); }
+            } catch (error) {
+                console.error(error);
+                setStatus("Bluetooth не подключен. Можно продолжить вручную.");
+                alert("Ошибка Bluetooth");
+            }
         }
-
         function sendBleCmd(cmd) {
             if (!bleCharacteristic) return;
-            bleQueue = bleQueue.then(async () => {
-                try { await bleCharacteristic.writeValue(new TextEncoder().encode(cmd)); } catch (e) {}
-            });
+            bleQueue = bleQueue.then(async () => { try { await bleCharacteristic.writeValue(new TextEncoder().encode(cmd)); } catch (error) { console.error("BLE write error", error); } });
         }
-
-        function closeModal() { document.getElementById('questionModal').classList.remove('active'); }
+        function closeModal() { document.getElementById("questionModal").classList.remove("active"); clearPlayerHighlights(); isButtonBlocked = true; }
+        function escapeHtml(text) { return String(text).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
     </script>
 </body>
 </html>
