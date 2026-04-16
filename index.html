@@ -47,6 +47,7 @@
             <br>
             <input type="text" id="playerNameInput" placeholder="Имя игрока">
             <button onclick="addPlayer()" style="background:#1f6feb;">Добавить игрока</button>
+            <button onclick="resetScores()" style="background:#d29922; color:#000;">Обнулить очки</button>
             <button onclick="fullGameGenerate()" id="mainBtn">Создать игру</button>
             <button onclick="connectBluetooth()" style="background:var(--violet);">Подключить кнопки</button>
             <div class="status-line" id="statusLine">Можно играть и без ESP32, выбор игрока останется ручным.</div>
@@ -122,6 +123,12 @@
             clearPlayerHighlights();
             renderPlayers();
             syncFirstPlayerScoreDisplay();
+        }
+        function resetScores() {
+            players = players.map((player) => ({ ...player, score: 0 }));
+            renderPlayers();
+            syncFirstPlayerScoreDisplay();
+            setStatus("Очки всех игроков обнулены.");
         }
         function renderPlayers() {
             localStorage.setItem("game_players", JSON.stringify(players));
