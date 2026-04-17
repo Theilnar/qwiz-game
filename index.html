@@ -48,6 +48,7 @@
             <input type="text" id="playerNameInput" placeholder="Имя игрока">
             <button onclick="addPlayer()" style="background:#1f6feb;">Добавить игрока</button>
             <button onclick="resetScores()" style="background:#d29922; color:#000;">Обнулить очки</button>
+            <button onclick="clearQuestionHistory()" style="background:#da3633;">Очистить историю вопросов</button>
             <button onclick="fullGameGenerate()" id="mainBtn">Создать игру</button>
             <button onclick="connectBluetooth()" style="background:var(--violet);">Подключить кнопки</button>
             <div class="status-line" id="statusLine">Можно играть и без ESP32, выбор игрока останется ручным.</div>
@@ -119,6 +120,11 @@
             const merged = [...usedQuestionsHistory, ...normalized];
             usedQuestionsHistory = [...new Set(merged)].slice(-QUESTION_HISTORY_LIMIT);
             localStorage.setItem("used_questions_history", JSON.stringify(usedQuestionsHistory));
+        }
+        function clearQuestionHistory() {
+            usedQuestionsHistory = [];
+            localStorage.removeItem("used_questions_history");
+            setStatus("История вопросов очищена.");
         }
         function syncFirstPlayerScoreDisplay() {
             if (!players.length) return;
