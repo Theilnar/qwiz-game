@@ -101,10 +101,11 @@
         let roomId = localStorage.getItem("svoyak_room_id") || DEFAULT_ROOM_ID;
         let firebaseDatabase = null;
         let firebaseRoomRef = null;
-        //const MODEL_NAME = "gemini-3-flash-preview";
-        const MODEL_NAME = "gemini-2.5-flash";
-        //const MODEL_NAME = "gemini-3.1-flash-lite";
-        //const MODEL_NAME = "gemini-1.5-flash";
+        const MODEL_CANDIDATES = [
+            "gemini-2.5-flash",
+            "gemini-3.1-flash-lite",
+            "gemini-3-flash-preview"
+        ];
         const MAX_BLE_PLAYERS = 3;
         const QUESTION_VALUES = [10, 20, 30, 40, 50, 100];
         const QUESTION_HISTORY_LIMIT = 250;
@@ -295,8 +296,8 @@
         function delay(ms) {
             return new Promise((resolve) => setTimeout(resolve, ms));
         }
-        async function callGeminiWithRetry(prompt, attempt = 1) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`;
+        async function callGeminiModel(prompt, modelName, attempt = 1) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(API_KEY)}`;
             const resp = await fetch(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -304,18 +305,39 @@
             });
 
             if (resp.ok) {
-                return resp.json();
+                const data = await resp.json();
+                data.__modelUsed = modelName;
+                return data;
             }
 
             if ((resp.status === 503 || resp.status === 429) && attempt < GEMINI_MAX_RETRIES) {
                 const waitMs = 1200 * attempt;
-                setStatus(`Gemini временно недоступен, повтор ${attempt + 1}/${GEMINI_MAX_RETRIES}...`);
+                setStatus(`${modelName} временно недоступна, повтор ${attempt + 1}/${GEMINI_MAX_RETRIES}...`);
                 await delay(waitMs);
-                return callGeminiWithRetry(prompt, attempt + 1);
+                return callGeminiModel(prompt, modelName, attempt + 1);
             }
 
             const errorText = await resp.text().catch(() => "");
-            throw new Error(`HTTP ${resp.status}${errorText ? `: ${errorText}` : ""}`);
+            const error = new Error(`HTTP ${resp.status}${errorText ? `: ${errorText}` : ""}`);
+            error.statusCode = resp.status;
+            throw error;
+        }
+        async function callGeminiWithRetry(prompt) {
+            const errors = [];
+            for (const modelName of MODEL_CANDIDATES) {
+                try {
+                    setStatus(`Пробую модель ${modelName}...`);
+                    return await callGeminiModel(prompt, modelName, 1);
+                } catch (error) {
+                    errors.push(`${modelName}: ${error.message}`);
+                    const statusCode = Number(error.statusCode || 0);
+                    const canFallback = statusCode === 429 || statusCode === 503 || statusCode >= 500;
+                    if (!canFallback) {
+                        throw error;
+                    }
+                }
+            }
+            throw new Error(errors.join(" | "));
         }
         async function fullGameGenerate() {
             if (!API_KEY) { alert("Введите ключ!"); return; }
@@ -334,7 +356,7 @@
                 saveUsedQuestions(gameData.flatMap((theme) => theme.questions.map((q) => `${theme.theme}: ${q.q}`)));
                 renderBoard();
                 document.getElementById("gameBoard").style.display = "block";
-                setStatus("Игра готова. Можно открывать вопросы.");
+                setStatus(`Игра готова. Модель: ${data.__modelUsed || "неизвестно"}.`);
                 publishHostState({ active: false, status: "game_ready" });
             } catch (error) {
                 console.error(error);
@@ -537,7 +559,7 @@
                 document.getElementById("modalQuestion").innerText = currentQ.q;
                 document.getElementById("ans").innerText = currentQ.a;
                 document.getElementById("ans").style.display = "none";
-                setStatus("Вопрос обновлен.");
+                setStatus(`Вопрос обновлен. Модель: ${data.__modelUsed || "неизвестно"}.`);
                 publishHostState({ status: "question_refreshed", answer: "", answerVisible: false });
             } catch (error) {
                 console.error(error);
