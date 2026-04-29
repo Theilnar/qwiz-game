@@ -54,7 +54,7 @@
             <button onclick="fullGameGenerate()" id="mainBtn">Создать игру</button>
             <button onclick="connectBluetooth()" style="background:var(--violet);">Подключить кнопки</button>
             <div class="status-line" id="statusLine">Можно играть и без ESP32, выбор игрока останется ручным.</div>
-            <div class="status-line" id="hostSyncLine">Настройте Firebase и откройте `svoyak_host.html` на телефоне ведущего.</div>
+            <div class="status-line" id="hostSyncLine">Настройте Firebase и откройте `svoyak_host.html` как экран для игроков.</div>
         </div>
         <div id="playersList" class="player-list"></div>
         <div id="gameBoard" style="display:none;" class="card"><div id="themesGrid" class="themes-grid"></div></div>
@@ -101,8 +101,7 @@
         let roomId = localStorage.getItem("svoyak_room_id") || DEFAULT_ROOM_ID;
         let firebaseDatabase = null;
         let firebaseRoomRef = null;
-        const MODEL_NAME = "gemini-3.1-flash-lite"
-        //const MODEL_NAME = "gemini-2.5-flash";
+        const MODEL_NAME = "gemini-3.1-flash-lite";
         //const MODEL_NAME = "gemini-1.5-flash";
         const MAX_BLE_PLAYERS = 3;
         const QUESTION_VALUES = [10, 20, 30, 40, 50, 100];
@@ -141,7 +140,7 @@
                 el.innerText = "Заполните файл firebase-config.js, чтобы заработал онлайн-экран ведущего.";
                 return;
             }
-            el.innerText = `Экран ведущего: ${getHostPageUrl()}`;
+            el.innerText = `Экран игроков: ${getHostPageUrl()}`;
         }
         function speak(text) {
             if (!window.speechSynthesis) return;
@@ -157,14 +156,25 @@
             const player = getSelectedPlayer(false);
             return player ? player.name : "";
         }
+        function getBoardSnapshot() {
+            return gameData.map((theme) => ({
+                theme: theme.theme,
+                questions: theme.questions.map((q) => ({
+                    val: q.val,
+                    done: Boolean(q.done)
+                }))
+            }));
+        }
         function buildHostState(extra = {}) {
             return {
                 room: roomId,
+                board: getBoardSnapshot(),
                 active: Boolean(currentQ),
                 theme: currentQ ? gameData[currentThemeIndex]?.theme || "" : "",
                 value: currentQ ? currentQ.val : "",
                 question: currentQ ? currentQ.q : "",
-                answer: currentQ ? currentQ.a : "",
+                answer: "",
+                answerVisible: false,
                 modifier: currentQ ? currentQ.mod : null,
                 selectedPlayer: getSelectedPlayerName(),
                 players: getScoresSnapshot(),
@@ -202,7 +212,7 @@
             currentQ = null;
             currentThemeIndex = null;
             currentQuestionIndex = null;
-            publishHostState({ active: false, status, question: "", answer: "", theme: "", value: "", modifier: null });
+            publishHostState({ active: false, status, question: "", answer: "", answerVisible: false, theme: "", value: "", modifier: null });
         }
         function getHistoryPromptBlock(limit = 60) {
             const recent = usedQuestionsHistory.slice(-limit);
@@ -386,7 +396,7 @@
             sendBleCmd("C0");
             syncFirstPlayerScoreDisplay();
             setStatus("Вопрос открыт. Ожидаю ответ игрока.");
-            publishHostState({ status: "question_open" });
+            publishHostState({ status: "question_open", answer: "", answerVisible: false });
         }
         function showAnswer() { document.getElementById("ans").style.display = "block"; }
         function getSelectedPlayer(showAlert = true) {
@@ -410,13 +420,13 @@
                 sendBleCmd(`W${pIdx + 1}`);
                 speak(`Верно! Плюс ${currentQ.val}`);
                 syncFirstPlayerScoreDisplay();
-                publishHostState({ status: "correct", selectedPlayer: player.name });
+                publishHostState({ status: "correct", selectedPlayer: player.name, answer: currentQ.a, answerVisible: true });
                 finalizeQuestion(2000, true);
             } else {
                 player.score -= currentQ.val;
                 sendBleCmd(`E${pIdx + 1}`);
                 syncFirstPlayerScoreDisplay();
-                publishHostState({ status: "wrong", selectedPlayer: player.name });
+                publishHostState({ status: "wrong", selectedPlayer: player.name, answer: "", answerVisible: false });
 
                 if (playersWhoAttempted.length >= players.length) {
                     speak("Никто не ответил верно. Вопрос снят.");
@@ -424,7 +434,7 @@
                     renderPlayers();
                     renderBoard();
                     setStatus("Все игроки ошиблись. Вопрос снят.");
-                    publishHostState({ status: "question_failed" });
+                    publishHostState({ status: "question_failed", answer: currentQ.a, answerVisible: true });
                     setTimeout(() => {
                         sendBleCmd("C0");
                         closeModal();
@@ -449,7 +459,7 @@
             renderPlayers();
             renderBoard();
             setStatus("Вопрос закрыт.");
-            publishHostState({ status: "question_closed" });
+            publishHostState({ status: "question_closed", answer: currentQ.a, answerVisible: true });
             setTimeout(() => {
                 if (resetBleAfterClose) {
                     sendBleCmd("C0");
@@ -526,7 +536,7 @@
                 document.getElementById("ans").innerText = currentQ.a;
                 document.getElementById("ans").style.display = "none";
                 setStatus("Вопрос обновлен.");
-                publishHostState({ status: "question_refreshed" });
+                publishHostState({ status: "question_refreshed", answer: "", answerVisible: false });
             } catch (error) {
                 console.error(error);
                 alert("Не удалось обновить вопрос.");
