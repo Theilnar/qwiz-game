@@ -106,6 +106,7 @@
         const MAX_BLE_PLAYERS = 3;
         const QUESTION_VALUES = [10, 20, 30, 40, 50, 100];
         const QUESTION_HISTORY_LIMIT = 250;
+        const GEMINI_MAX_RETRIES = 3;
         const ALL_THEMES = ["Космос", "СССР", "Авто", "Гаджеты", "Мультфильмы", "Еда", "География", "Кино", "Наука", "Животные", "История", "Музыка", "Бренды", "Спорт", "Игры", "Советские фильмы", "Советские мультфильмы", "Русская литература", "Города России", "Новый год по-русски", "Школьная классика", "Российская эстрада", "Телевидение 90-х и 2000-х", "Пословицы и поговорки", "Русские сказки", "Мемы рунета", "Праздники в России", "Продукты из СССР", "Дворовые игры", "Знакомые бренды России", "Женские штучки", "Мужские штучки"];
         document.getElementById("apiKeyInput").value = API_KEY;
         document.getElementById("roomIdInput").value = roomId;
@@ -278,6 +279,31 @@
                 'Верни только JSON-массив формата [{"theme":"Название","questions":[{"val":10,"q":"Вопрос","a":"Ответ","mod":null}]}].'
             ].join(" ");
         }
+        function delay(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+        async function callGeminiWithRetry(prompt, attempt = 1) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`;
+            const resp = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+
+            if (resp.ok) {
+                return resp.json();
+            }
+
+            if ((resp.status === 503 || resp.status === 429) && attempt < GEMINI_MAX_RETRIES) {
+                const waitMs = 1200 * attempt;
+                setStatus(`Gemini временно недоступен, повтор ${attempt + 1}/${GEMINI_MAX_RETRIES}...`);
+                await delay(waitMs);
+                return callGeminiWithRetry(prompt, attempt + 1);
+            }
+
+            const errorText = await resp.text().catch(() => "");
+            throw new Error(`HTTP ${resp.status}${errorText ? `: ${errorText}` : ""}`);
+        }
         async function fullGameGenerate() {
             if (!API_KEY) { alert("Введите ключ!"); return; }
             const btn = document.getElementById("mainBtn");
@@ -286,12 +312,9 @@
             btn.disabled = true;
             setStatus("Генерирую пакет вопросов...");
             const selected = shuffle(ALL_THEMES).slice(0, 6).join(", ");
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`;
             const prompt = buildPrompt(selected, mode);
             try {
-                const resp = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] }) });
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const data = await resp.json();
+                const data = await callGeminiWithRetry(prompt);
                 const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
                 const parsed = extractJsonArray(text);
                 gameData = validateGameData(parsed);
@@ -302,7 +325,7 @@
                 publishHostState({ active: false, status: "game_ready" });
             } catch (error) {
                 console.error(error);
-                alert("Ошибка генерации. Попробуйте еще раз.");
+                alert("Ошибка генерации. Если это 503, модель перегружена: подождите немного и попробуйте снова.");
                 setStatus("Генерация не удалась. Проверьте ключ и повторите.");
             } finally {
                 btn.innerText = "Создать игру";
@@ -470,7 +493,6 @@
             const themeName = gameData[currentThemeIndex].theme;
             const value = currentQ.val;
             const hasModifier = currentQ.mod;
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`;
             const difficultyByValue = {
                 10: "простой и очевидный",
                 20: "чуть сложнее простого",
@@ -490,9 +512,7 @@
                 'Верни только JSON-объект вида {"val":10,"q":"Вопрос","a":"Ответ","mod":null}.'
             ].join(" ");
             try {
-                const resp = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] }) });
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const data = await resp.json();
+                const data = await callGeminiWithRetry(prompt);
                 const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
                 const newQuestion = extractJsonObject(text);
                 if (Number(newQuestion.val) !== value) throw new Error("Value mismatch");
