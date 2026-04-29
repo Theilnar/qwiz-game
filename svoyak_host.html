@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Свояк - Экран ведущего</title>
+    <style>
+        :root { --bg:#081018; --panel:#111926; --border:#223048; --text:#e9eef7; --muted:#8ea0bc; --accent:#f4b942; --green:#44c26a; --red:#ef5a5a; --blue:#6fb7ff; }
+        * { box-sizing:border-box; }
+        body { margin:0; padding:18px; font-family:"Segoe UI",sans-serif; background:linear-gradient(180deg,#0f1726 0%,#081018 100%); color:var(--text); }
+        .wrap { max-width:900px; margin:0 auto; display:grid; gap:14px; }
+        .card { background:rgba(17,25,38,.96); border:1px solid var(--border); border-radius:16px; padding:18px; }
+        .meta { display:flex; gap:10px; flex-wrap:wrap; }
+        .pill { padding:8px 12px; border-radius:999px; background:#152235; border:1px solid var(--border); color:var(--muted); font-weight:600; }
+        .value { color:var(--accent); font-size:40px; font-weight:800; }
+        .theme { color:var(--blue); font-size:24px; font-weight:700; margin-bottom:8px; }
+        .question { font-size:26px; line-height:1.35; margin:8px 0 0; }
+        .answer { font-size:24px; line-height:1.35; color:var(--green); margin:10px 0 0; }
+        .muted { color:var(--muted); }
+        .players { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+        .player { background:#152235; border:1px solid var(--border); border-radius:12px; padding:10px; }
+        .player-name { font-weight:700; }
+        .player-score { color:var(--accent); font-size:24px; font-weight:800; }
+        .selected { border-color:var(--green); box-shadow:0 0 0 1px rgba(68,194,106,.35) inset; }
+        .idle { text-align:center; padding:32px 16px; color:var(--muted); font-size:20px; }
+        .status-good { color:var(--green); }
+        .status-bad { color:var(--red); }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="card">
+            <div class="meta">
+                <div class="pill" id="connectionState">Подключение...</div>
+                <div class="pill" id="roomState">Комната: -</div>
+                <div class="pill" id="statusState">Статус: ожидание</div>
+            </div>
+        </div>
+        <div class="card" id="questionCard">
+            <div class="idle" id="idleState">Ожидаю выбор вопроса на основном экране.</div>
+            <div id="questionState" style="display:none;">
+                <div class="theme" id="hostTheme"></div>
+                <div class="value" id="hostValue"></div>
+                <div class="question" id="hostQuestion"></div>
+                <div class="answer" id="hostAnswer"></div>
+                <div class="muted" id="hostModifier" style="margin-top:8px;"></div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="theme" style="font-size:20px;">Игроки</div>
+            <div class="players" id="playersGrid"></div>
+        </div>
+    </div>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script>
+        const params = new URLSearchParams(location.search);
+        const room = sanitizeRoomId(params.get("room") || "svoyak-room");
+        let roomRef = null;
+
+        document.getElementById("roomState").innerText = `Комната: ${room || "не указана"}`;
+
+        function setConnectionState(text, ok = true) {
+            const el = document.getElementById("connectionState");
+            el.innerText = text;
+            el.className = `pill ${ok ? "status-good" : "status-bad"}`;
+        }
+
+        function setStatusText(status) {
+            const map = {
+                idle: "ожидание",
+                game_ready: "игра готова",
+                question_open: "вопрос открыт",
+                buzzed: "кто-то нажал",
+                correct: "верный ответ",
+                wrong: "ошибка",
+                question_failed: "вопрос снят",
+                question_closed: "вопрос закрыт",
+                question_refreshed: "вопрос обновлен",
+                scores_reset: "очки обнулены"
+            };
+            document.getElementById("statusState").innerText = `Статус: ${map[status] || status || "ожидание"}`;
+        }
+
+        function renderPlayers(players, selectedPlayer) {
+            const grid = document.getElementById("playersGrid");
+            grid.innerHTML = (players || []).map((player) => `
+                <div class="player ${player.name === selectedPlayer ? "selected" : ""}">
+                    <div class="player-name">${escapeHtml(player.name)}</div>
+                    <div class="player-score">${player.score}</div>
+                </div>
+            `).join("");
+        }
+
+        function renderState(state) {
+            if (!state) return;
+            setStatusText(state.status);
+            renderPlayers(state.players, state.selectedPlayer);
+
+            const idle = document.getElementById("idleState");
+            const content = document.getElementById("questionState");
+            if (!state.active) {
+                idle.style.display = "block";
+                idle.innerText = state.status === "game_ready"
+                    ? "Игра готова. Жду выбор вопроса."
+                    : "Ожидаю выбор вопроса на основном экране.";
+                content.style.display = "none";
+                return;
+            }
+
+            idle.style.display = "none";
+            content.style.display = "block";
+            document.getElementById("hostTheme").innerText = state.theme || "";
+            document.getElementById("hostValue").innerText = state.value || "";
+            document.getElementById("hostQuestion").innerText = state.question || "";
+            document.getElementById("hostAnswer").innerText = `Ответ: ${state.answer || ""}`;
+            document.getElementById("hostModifier").innerText = state.modifier ? `Модификатор: ${state.modifier}` : "";
+        }
+
+        function initFirebaseHost() {
+            if (!window.firebase || !window.SVOYAK_FIREBASE_CONFIG) {
+                setConnectionState("Нет Firebase config", false);
+                return;
+            }
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(window.SVOYAK_FIREBASE_CONFIG);
+                }
+                roomRef = firebase.database().ref(`svoyak_rooms/${room}`);
+                roomRef.on("value", (snapshot) => {
+                    const data = snapshot.val();
+                    setConnectionState("Связь активна", true);
+                    renderState(data || { room, active: false, status: "idle", players: [] });
+                }, (error) => {
+                    console.error(error);
+                    setConnectionState("Ошибка чтения", false);
+                });
+            } catch (error) {
+                console.error(error);
+                setConnectionState("Ошибка Firebase", false);
+            }
+        }
+
+        function escapeHtml(text) {
+            return String(text || "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#39;");
+        }
+
+        function sanitizeRoomId(raw) {
+            return String(raw || "")
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9_-]+/g, "-")
+                .replace(/^-+|-+$/g, "") || "svoyak-room";
+        }
+
+        initFirebaseHost();
+    </script>
+</body>
+</html>
