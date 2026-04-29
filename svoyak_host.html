@@ -3,52 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Свояк - Экран ведущего</title>
+    <title>Свояк - Экран игроков</title>
     <style>
-        :root { --bg:#081018; --panel:#111926; --border:#223048; --text:#e9eef7; --muted:#8ea0bc; --accent:#f4b942; --green:#44c26a; --red:#ef5a5a; --blue:#6fb7ff; }
+        :root { --bg:#07111c; --panel:#101a28; --panel-alt:#152235; --border:#233550; --text:#edf3fb; --muted:#91a5c5; --accent:#f3b33d; --blue:#79bdff; --green:#47c66f; }
         * { box-sizing:border-box; }
-        body { margin:0; padding:18px; font-family:"Segoe UI",sans-serif; background:linear-gradient(180deg,#0f1726 0%,#081018 100%); color:var(--text); }
-        .wrap { max-width:900px; margin:0 auto; display:grid; gap:14px; }
-        .card { background:rgba(17,25,38,.96); border:1px solid var(--border); border-radius:16px; padding:18px; }
-        .meta { display:flex; gap:10px; flex-wrap:wrap; }
-        .pill { padding:8px 12px; border-radius:999px; background:#152235; border:1px solid var(--border); color:var(--muted); font-weight:600; }
-        .value { color:var(--accent); font-size:40px; font-weight:800; }
-        .theme { color:var(--blue); font-size:24px; font-weight:700; margin-bottom:8px; }
-        .question { font-size:26px; line-height:1.35; margin:8px 0 0; }
-        .answer { font-size:24px; line-height:1.35; color:var(--green); margin:10px 0 0; }
-        .muted { color:var(--muted); }
-        .players { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
-        .player { background:#152235; border:1px solid var(--border); border-radius:12px; padding:10px; }
-        .player-name { font-weight:700; }
-        .player-score { color:var(--accent); font-size:24px; font-weight:800; }
-        .selected { border-color:var(--green); box-shadow:0 0 0 1px rgba(68,194,106,.35) inset; }
-        .idle { text-align:center; padding:32px 16px; color:var(--muted); font-size:20px; }
-        .status-good { color:var(--green); }
-        .status-bad { color:var(--red); }
+        body { margin:0; font-family:"Segoe UI",sans-serif; background:radial-gradient(circle at top,#14233b 0%,#07111c 58%); color:var(--text); padding:18px; }
+        .wrap { max-width:1280px; margin:0 auto; display:grid; gap:16px; }
+        .topbar { display:flex; gap:10px; flex-wrap:wrap; }
+        .pill { padding:8px 12px; border-radius:999px; background:var(--panel-alt); border:1px solid var(--border); color:var(--muted); font-weight:700; }
+        .card { background:rgba(16,26,40,.96); border:1px solid var(--border); border-radius:16px; padding:18px; }
+        .players { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+        .player { background:var(--panel-alt); border:1px solid var(--border); border-radius:12px; padding:12px; }
+        .player.selected { border-color:var(--green); box-shadow:0 0 0 1px rgba(71,198,111,.35) inset; }
+        .player-name { font-size:18px; font-weight:700; }
+        .player-score { font-size:30px; color:var(--accent); font-weight:800; margin-top:4px; }
+        .board { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
+        .theme-column { background:var(--panel-alt); border:1px solid var(--border); border-radius:10px; padding:10px; }
+        .theme-title { min-height:52px; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--blue); font-size:12px; font-weight:800; text-transform:uppercase; }
+        .question-cell { background:#182537; border:1px solid var(--border); border-radius:8px; padding:16px 8px; margin-top:8px; color:var(--accent); font-size:28px; font-weight:800; text-align:center; }
+        .question-cell.answered { color:#49596d; opacity:.35; }
+        .question-screen { min-height:360px; display:flex; flex-direction:column; justify-content:center; text-align:center; }
+        .question-theme { color:var(--blue); font-size:26px; font-weight:800; }
+        .question-value { color:var(--accent); font-size:54px; font-weight:900; margin-top:10px; }
+        .question-text { font-size:34px; line-height:1.35; margin-top:22px; }
+        .answer-text { font-size:32px; line-height:1.35; margin-top:26px; color:var(--green); font-weight:800; }
+        .modifier { margin-top:16px; color:var(--accent); font-weight:700; font-size:18px; }
+        .buzz-box { margin-top:26px; padding:18px; border-radius:14px; background:rgba(71,198,111,.14); border:1px solid rgba(71,198,111,.4); }
+        .buzz-label { color:var(--muted); font-size:18px; text-transform:uppercase; letter-spacing:.08em; }
+        .buzz-name { color:var(--green); font-size:40px; font-weight:900; margin-top:8px; }
+        .hidden { display:none; }
+        .idle { color:var(--muted); text-align:center; font-size:24px; padding:28px 10px; }
+        @media (max-width:1100px) { .board { grid-template-columns:repeat(3,1fr); } .question-text { font-size:28px; } }
+        @media (max-width:700px) { .board { grid-template-columns:repeat(2,1fr); } .question-value { font-size:42px; } .question-text { font-size:22px; } .answer-text { font-size:22px; } .buzz-name { font-size:28px; } }
     </style>
 </head>
 <body>
     <div class="wrap">
-        <div class="card">
-            <div class="meta">
-                <div class="pill" id="connectionState">Подключение...</div>
-                <div class="pill" id="roomState">Комната: -</div>
-                <div class="pill" id="statusState">Статус: ожидание</div>
-            </div>
+        <div class="topbar">
+            <div class="pill" id="connectionState">Подключение...</div>
+            <div class="pill" id="roomState">Комната: -</div>
+            <div class="pill" id="statusState">Статус: ожидание</div>
         </div>
-        <div class="card" id="questionCard">
-            <div class="idle" id="idleState">Ожидаю выбор вопроса на основном экране.</div>
-            <div id="questionState" style="display:none;">
-                <div class="theme" id="hostTheme"></div>
-                <div class="value" id="hostValue"></div>
-                <div class="question" id="hostQuestion"></div>
-                <div class="answer" id="hostAnswer"></div>
-                <div class="muted" id="hostModifier" style="margin-top:8px;"></div>
-            </div>
-        </div>
+
         <div class="card">
-            <div class="theme" style="font-size:20px;">Игроки</div>
             <div class="players" id="playersGrid"></div>
+        </div>
+
+        <div class="card hidden" id="questionCard">
+            <div class="question-screen">
+                <div class="question-theme" id="questionTheme"></div>
+                <div class="question-value" id="questionValue"></div>
+                <div class="question-text" id="questionText"></div>
+                <div class="answer-text hidden" id="answerText"></div>
+                <div class="modifier" id="modifierText"></div>
+                <div class="buzz-box hidden" id="buzzBox">
+                    <div class="buzz-label">Первым нажал</div>
+                    <div class="buzz-name" id="buzzName"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="boardCard">
+            <div class="idle" id="idleText">Жду начала игры или выбор вопроса.</div>
+            <div class="board" id="boardGrid"></div>
         </div>
     </div>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -57,14 +74,21 @@
     <script>
         const params = new URLSearchParams(location.search);
         const room = sanitizeRoomId(params.get("room") || "svoyak-room");
-        let roomRef = null;
 
-        document.getElementById("roomState").innerText = `Комната: ${room || "не указана"}`;
+        document.getElementById("roomState").innerText = `Комната: ${room}`;
+
+        function sanitizeRoomId(raw) {
+            return String(raw || "")
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9_-]+/g, "-")
+                .replace(/^-+|-+$/g, "") || "svoyak-room";
+        }
 
         function setConnectionState(text, ok = true) {
             const el = document.getElementById("connectionState");
             el.innerText = text;
-            el.className = `pill ${ok ? "status-good" : "status-bad"}`;
+            el.style.color = ok ? "var(--green)" : "#ef5a5a";
         }
 
         function setStatusText(status) {
@@ -84,8 +108,7 @@
         }
 
         function renderPlayers(players, selectedPlayer) {
-            const grid = document.getElementById("playersGrid");
-            grid.innerHTML = (players || []).map((player) => `
+            document.getElementById("playersGrid").innerHTML = (players || []).map((player) => `
                 <div class="player ${player.name === selectedPlayer ? "selected" : ""}">
                     <div class="player-name">${escapeHtml(player.name)}</div>
                     <div class="player-score">${player.score}</div>
@@ -93,53 +116,66 @@
             `).join("");
         }
 
-        function renderState(state) {
-            if (!state) return;
-            setStatusText(state.status);
-            renderPlayers(state.players, state.selectedPlayer);
-
-            const idle = document.getElementById("idleState");
-            const content = document.getElementById("questionState");
-            if (!state.active) {
-                idle.style.display = "block";
-                idle.innerText = state.status === "game_ready"
-                    ? "Игра готова. Жду выбор вопроса."
-                    : "Ожидаю выбор вопроса на основном экране.";
-                content.style.display = "none";
-                return;
-            }
-
-            idle.style.display = "none";
-            content.style.display = "block";
-            document.getElementById("hostTheme").innerText = state.theme || "";
-            document.getElementById("hostValue").innerText = state.value || "";
-            document.getElementById("hostQuestion").innerText = state.question || "";
-            document.getElementById("hostAnswer").innerText = `Ответ: ${state.answer || ""}`;
-            document.getElementById("hostModifier").innerText = state.modifier ? `Модификатор: ${state.modifier}` : "";
+        function renderBoard(board) {
+            const grid = document.getElementById("boardGrid");
+            grid.innerHTML = (board || []).map((theme) => `
+                <div class="theme-column">
+                    <div class="theme-title">${escapeHtml(theme.theme)}</div>
+                    ${(theme.questions || []).map((q) => `
+                        <div class="question-cell ${q.done ? "answered" : ""}">${q.val}</div>
+                    `).join("")}
+                </div>
+            `).join("");
         }
 
-        function initFirebaseHost() {
-            if (!window.firebase || !window.SVOYAK_FIREBASE_CONFIG) {
-                setConnectionState("Нет Firebase config", false);
+        function renderQuestion(state) {
+            const boardCard = document.getElementById("boardCard");
+            const questionCard = document.getElementById("questionCard");
+            const idleText = document.getElementById("idleText");
+            const answerEl = document.getElementById("answerText");
+            const buzzBox = document.getElementById("buzzBox");
+            const buzzName = document.getElementById("buzzName");
+
+            renderBoard(state.board || []);
+
+            if (!state.active) {
+                questionCard.classList.add("hidden");
+                boardCard.classList.remove("hidden");
+                idleText.innerText = state.status === "game_ready"
+                    ? "Игра готова. Выбирайте вопрос."
+                    : "Жду начала игры или выбор вопроса.";
                 return;
             }
-            try {
-                if (!firebase.apps.length) {
-                    firebase.initializeApp(window.SVOYAK_FIREBASE_CONFIG);
-                }
-                roomRef = firebase.database().ref(`svoyak_rooms/${room}`);
-                roomRef.on("value", (snapshot) => {
-                    const data = snapshot.val();
-                    setConnectionState("Связь активна", true);
-                    renderState(data || { room, active: false, status: "idle", players: [] });
-                }, (error) => {
-                    console.error(error);
-                    setConnectionState("Ошибка чтения", false);
-                });
-            } catch (error) {
-                console.error(error);
-                setConnectionState("Ошибка Firebase", false);
+
+            boardCard.classList.add("hidden");
+            questionCard.classList.remove("hidden");
+            document.getElementById("questionTheme").innerText = state.theme || "";
+            document.getElementById("questionValue").innerText = state.value || "";
+            document.getElementById("questionText").innerText = state.question || "";
+            document.getElementById("modifierText").innerText = state.modifier ? `Модификатор: ${state.modifier}` : "";
+
+            if (state.selectedPlayer) {
+                buzzName.innerText = state.selectedPlayer;
+                buzzBox.classList.remove("hidden");
+            } else {
+                buzzName.innerText = "";
+                buzzBox.classList.add("hidden");
             }
+
+            if (state.answerVisible && state.answer) {
+                answerEl.innerText = `Ответ: ${state.answer}`;
+                answerEl.classList.remove("hidden");
+            } else {
+                answerEl.innerText = "";
+                answerEl.classList.add("hidden");
+            }
+        }
+
+        function renderState(state) {
+            const safeState = state || { active: false, status: "idle", players: [], board: [] };
+            setStatusText(safeState.status);
+            renderPlayers(safeState.players || [], safeState.selectedPlayer || "");
+            renderQuestion(safeState);
         }
 
         function escapeHtml(text) {
@@ -151,15 +187,29 @@
                 .replaceAll("'", "&#39;");
         }
 
-        function sanitizeRoomId(raw) {
-            return String(raw || "")
-                .trim()
-                .toLowerCase()
-                .replace(/[^a-z0-9_-]+/g, "-")
-                .replace(/^-+|-+$/g, "") || "svoyak-room";
+        function initFirebase() {
+            if (!window.firebase || !window.SVOYAK_FIREBASE_CONFIG) {
+                setConnectionState("Нет Firebase config", false);
+                return;
+            }
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(window.SVOYAK_FIREBASE_CONFIG);
+                }
+                firebase.database().ref(`svoyak_rooms/${room}`).on("value", (snapshot) => {
+                    setConnectionState("Связь активна", true);
+                    renderState(snapshot.val());
+                }, (error) => {
+                    console.error(error);
+                    setConnectionState("Ошибка чтения", false);
+                });
+            } catch (error) {
+                console.error(error);
+                setConnectionState("Ошибка Firebase", false);
+            }
         }
 
-        initFirebaseHost();
+        initFirebase();
     </script>
 </body>
 </html>
