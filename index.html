@@ -49,9 +49,12 @@
             <button onclick="addPlayer()" style="background:#1f6feb;">Добавить игрока</button>
             <button onclick="resetScores()" style="background:#d29922; color:#000;">Обнулить очки</button>
             <button onclick="clearQuestionHistory()" style="background:#da3633;">Очистить историю вопросов</button>
+            <input type="text" id="roomIdInput" placeholder="Комната игры" style="width:180px;">
+            <button onclick="saveRoomId()" style="background:#30363d;">Сохранить комнату</button>
             <button onclick="fullGameGenerate()" id="mainBtn">Создать игру</button>
             <button onclick="connectBluetooth()" style="background:var(--violet);">Подключить кнопки</button>
             <div class="status-line" id="statusLine">Можно играть и без ESP32, выбор игрока останется ручным.</div>
+            <div class="status-line" id="hostSyncLine">Настройте Firebase и откройте `svoyak_host.html` на телефоне ведущего.</div>
         </div>
         <div id="playersList" class="player-list"></div>
         <div id="gameBoard" style="display:none;" class="card"><div id="themesGrid" class="themes-grid"></div></div>
@@ -79,6 +82,9 @@
             </div>
         </div>
     </div>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <script src="firebase-config.js"></script>
     <script>
         let API_KEY = localStorage.getItem("gemini_key") || "";
         let players = JSON.parse(localStorage.getItem("game_players")) || [{ id: 1, name: "Игрок 1", score: 0 }];
@@ -91,6 +97,10 @@
         let bleQueue = Promise.resolve();
         let playersWhoAttempted = [];
         let usedQuestionsHistory = JSON.parse(localStorage.getItem("used_questions_history") || "[]");
+        const DEFAULT_ROOM_ID = "svoyak-room";
+        let roomId = localStorage.getItem("svoyak_room_id") || DEFAULT_ROOM_ID;
+        let firebaseDatabase = null;
+        let firebaseRoomRef = null;
         const MODEL_NAME = "gemini-3-flash-preview";
         //const MODEL_NAME = "gemini-1.5-flash";
         const MAX_BLE_PLAYERS = 3;
@@ -98,14 +108,99 @@
         const QUESTION_HISTORY_LIMIT = 250;
         const ALL_THEMES = ["Космос", "СССР", "Авто", "Гаджеты", "Мультфильмы", "Еда", "География", "Кино", "Наука", "Животные", "История", "Музыка", "Бренды", "Спорт", "Игры", "Советские фильмы", "Советские мультфильмы", "Русская литература", "Города России", "Новый год по-русски", "Школьная классика", "Российская эстрада", "Телевидение 90-х и 2000-х", "Пословицы и поговорки", "Русские сказки", "Мемы рунета", "Праздники в России", "Продукты из СССР", "Дворовые игры", "Знакомые бренды России", "Женские штучки", "Мужские штучки"];
         document.getElementById("apiKeyInput").value = API_KEY;
+        document.getElementById("roomIdInput").value = roomId;
         renderPlayers();
+        initFirebaseSync();
+        updateHostSyncHint();
         function setStatus(text) { document.getElementById("statusLine").innerText = text; }
+        function sanitizeRoomId(raw) {
+            return String(raw || "")
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9_-]+/g, "-")
+                .replace(/^-+|-+$/g, "") || DEFAULT_ROOM_ID;
+        }
+        function saveRoomId() {
+            roomId = sanitizeRoomId(document.getElementById("roomIdInput").value);
+            document.getElementById("roomIdInput").value = roomId;
+            localStorage.setItem("svoyak_room_id", roomId);
+            initFirebaseSync();
+            updateHostSyncHint();
+            setStatus(`Комната сохранена: ${roomId}`);
+        }
+        function getHostPageUrl() {
+            const url = new URL("svoyak_host.html", location.href);
+            url.searchParams.set("room", roomId);
+            return url.toString();
+        }
+        function updateHostSyncHint() {
+            const el = document.getElementById("hostSyncLine");
+            if (!window.SVOYAK_FIREBASE_CONFIG || !window.firebase) {
+                el.innerText = "Заполните файл firebase-config.js, чтобы заработал онлайн-экран ведущего.";
+                return;
+            }
+            el.innerText = `Экран ведущего: ${getHostPageUrl()}`;
+        }
         function speak(text) {
             if (!window.speechSynthesis) return;
             const utter = new SpeechSynthesisUtterance(text);
             utter.lang = "ru-RU";
             window.speechSynthesis.cancel();
             window.speechSynthesis.speak(utter);
+        }
+        function getScoresSnapshot() {
+            return players.map((player) => ({ id: player.id, name: player.name, score: player.score }));
+        }
+        function getSelectedPlayerName() {
+            const player = getSelectedPlayer(false);
+            return player ? player.name : "";
+        }
+        function buildHostState(extra = {}) {
+            return {
+                room: roomId,
+                active: Boolean(currentQ),
+                theme: currentQ ? gameData[currentThemeIndex]?.theme || "" : "",
+                value: currentQ ? currentQ.val : "",
+                question: currentQ ? currentQ.q : "",
+                answer: currentQ ? currentQ.a : "",
+                modifier: currentQ ? currentQ.mod : null,
+                selectedPlayer: getSelectedPlayerName(),
+                players: getScoresSnapshot(),
+                updatedAt: new Date().toISOString(),
+                ...extra
+            };
+        }
+        function initFirebaseSync() {
+            if (!window.firebase || !window.SVOYAK_FIREBASE_CONFIG) {
+                firebaseDatabase = null;
+                firebaseRoomRef = null;
+                return;
+            }
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(window.SVOYAK_FIREBASE_CONFIG);
+                }
+                firebaseDatabase = firebase.database();
+                firebaseRoomRef = firebaseDatabase.ref(`svoyak_rooms/${sanitizeRoomId(roomId)}`);
+            } catch (error) {
+                console.error("Firebase init error", error);
+                firebaseDatabase = null;
+                firebaseRoomRef = null;
+            }
+        }
+        async function publishHostState(extra = {}) {
+            if (!firebaseRoomRef) return;
+            try {
+                await firebaseRoomRef.set(buildHostState(extra));
+            } catch (error) {
+                console.error("Host sync error", error);
+            }
+        }
+        function clearHostState(status = "idle") {
+            currentQ = null;
+            currentThemeIndex = null;
+            currentQuestionIndex = null;
+            publishHostState({ active: false, status, question: "", answer: "", theme: "", value: "", modifier: null });
         }
         function getHistoryPromptBlock(limit = 60) {
             const recent = usedQuestionsHistory.slice(-limit);
@@ -151,11 +246,13 @@
             renderPlayers();
             syncFirstPlayerScoreDisplay();
             setStatus("Очки всех игроков обнулены.");
+            publishHostState({ status: "scores_reset" });
         }
         function renderPlayers() {
             localStorage.setItem("game_players", JSON.stringify(players));
             document.getElementById("playersList").innerHTML = players.map((p, idx) => `<div class="player-card" id="player-card-${p.id}"><div><b>${escapeHtml(p.name)}</b>: <span style="color:var(--accent)">${p.score}</span>${idx < MAX_BLE_PLAYERS ? "" : " <small>(без кнопки)</small>"}</div><button class="delete-btn" onclick="removePlayer(${p.id})">x</button></div>`).join("");
             document.getElementById("playerSelector").innerHTML = players.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
+            if (currentQ) publishHostState();
         }
         function clearPlayerHighlights() { document.querySelectorAll(".player-card").forEach((card) => card.classList.remove("active")); }
         function highlightPlayer(playerId) { clearPlayerHighlights(); const card = document.getElementById(`player-card-${playerId}`); if (card) card.classList.add("active"); }
@@ -202,6 +299,7 @@
                 renderBoard();
                 document.getElementById("gameBoard").style.display = "block";
                 setStatus("Игра готова. Можно открывать вопросы.");
+                publishHostState({ active: false, status: "game_ready" });
             } catch (error) {
                 console.error(error);
                 alert("Ошибка генерации. Попробуйте еще раз.");
@@ -264,12 +362,13 @@
             sendBleCmd("C0");
             syncFirstPlayerScoreDisplay();
             setStatus("Вопрос открыт. Ожидаю ответ игрока.");
+            publishHostState({ status: "question_open" });
         }
         function showAnswer() { document.getElementById("ans").style.display = "block"; }
-        function getSelectedPlayer() {
+        function getSelectedPlayer(showAlert = true) {
             const pId = document.getElementById("playerSelector").value;
             const player = players.find((p) => String(p.id) === String(pId));
-            if (!player) { alert("Игрок не выбран"); return null; }
+            if (!player && showAlert) { alert("Игрок не выбран"); return null; }
             return player;
         }
         function handleScore(isCorrect) {
@@ -287,11 +386,13 @@
                 sendBleCmd(`W${pIdx + 1}`);
                 speak(`Верно! Плюс ${currentQ.val}`);
                 syncFirstPlayerScoreDisplay();
+                publishHostState({ status: "correct", selectedPlayer: player.name });
                 finalizeQuestion(2000, true);
             } else {
                 player.score -= currentQ.val;
                 sendBleCmd(`E${pIdx + 1}`);
                 syncFirstPlayerScoreDisplay();
+                publishHostState({ status: "wrong", selectedPlayer: player.name });
 
                 if (playersWhoAttempted.length >= players.length) {
                     speak("Никто не ответил верно. Вопрос снят.");
@@ -299,6 +400,7 @@
                     renderPlayers();
                     renderBoard();
                     setStatus("Все игроки ошиблись. Вопрос снят.");
+                    publishHostState({ status: "question_failed" });
                     setTimeout(() => {
                         sendBleCmd("C0");
                         closeModal();
@@ -323,6 +425,7 @@
             renderPlayers();
             renderBoard();
             setStatus("Вопрос закрыт.");
+            publishHostState({ status: "question_closed" });
             setTimeout(() => {
                 if (resetBleAfterClose) {
                     sendBleCmd("C0");
@@ -402,6 +505,7 @@
                 document.getElementById("ans").innerText = currentQ.a;
                 document.getElementById("ans").style.display = "none";
                 setStatus("Вопрос обновлен.");
+                publishHostState({ status: "question_refreshed" });
             } catch (error) {
                 console.error(error);
                 alert("Не удалось обновить вопрос.");
@@ -435,6 +539,7 @@
                         highlightPlayer(player.id);
                         speak(player.name);
                         setStatus(`Первым нажал: ${player.name}`);
+                        publishHostState({ status: "buzzed", selectedPlayer: player.name });
                     }
                 });
                 setStatus("ESP32-кнопки подключены.");
@@ -449,7 +554,7 @@
             if (!bleCharacteristic) return;
             bleQueue = bleQueue.then(async () => { try { await bleCharacteristic.writeValue(new TextEncoder().encode(cmd)); } catch (error) { console.error("BLE write error", error); } });
         }
-        function closeModal() { document.getElementById("questionModal").classList.remove("active"); clearPlayerHighlights(); isButtonBlocked = true; playersWhoAttempted = []; }
+        function closeModal() { document.getElementById("questionModal").classList.remove("active"); clearPlayerHighlights(); isButtonBlocked = true; playersWhoAttempted = []; clearHostState("idle"); }
         function escapeHtml(text) { return String(text).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
     </script>
 </body>
