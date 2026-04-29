@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Свояк ИИ 2.9.3 - ESP32 Edition</title>
+    <style>
+        :root { --bg:#0b0e14; --panel:#161b22; --panel-alt:#0d1117; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#d29922; --blue:#58a6ff; --green:#238636; --green-bright:#3fb950; --red:#da3633; --violet:#8b5cf6; }
+        * { box-sizing: border-box; }
+        body { font-family:"Segoe UI",sans-serif; background:radial-gradient(circle at top,#121826 0%,var(--bg) 55%); color:var(--text); text-align:center; padding:20px; margin:0; }
+        .container { max-width:1100px; margin:0 auto; }
+        .card { background:rgba(22,27,34,.96); border-radius:12px; padding:20px; margin:15px auto; border:1px solid var(--border); }
+        button { background:var(--green); color:#fff; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:600; margin:5px; transition:transform .15s ease,opacity .2s ease; }
+        button:hover { opacity:.88; transform:translateY(-1px); }
+        button:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+        button.delete-btn { background:var(--red); padding:2px 8px; font-size:11px; margin-left:10px; border-radius:4px; }
+        button.modifier-action { background:var(--accent); color:#000; width:100%; font-size:18px; margin-top:10px; }
+        input, select { padding:10px; border-radius:6px; border:1px solid var(--border); background:var(--panel-alt); color:#fff; margin:5px; }
+        .themes-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin:20px 0; }
+        .theme-column { background:var(--panel-alt); border-radius:8px; padding:10px; border:1px solid var(--border); }
+        .theme-title { font-size:11px; font-weight:800; color:var(--blue); min-height:45px; display:flex; align-items:center; justify-content:center; text-transform:uppercase; }
+        .question-cell { background:var(--panel); border:1px solid var(--border); border-radius:4px; padding:15px 5px; margin:5px 0; font-size:24px; font-weight:bold; cursor:pointer; color:var(--accent); }
+        .question-cell.answered { color:#484f58; opacity:.3; pointer-events:none; }
+        .modal { display:none; position:fixed; inset:0; width:100%; height:100%; background:rgba(0,0,0,.95); justify-content:center; align-items:center; z-index:1000; padding:20px; }
+        .modal.active { display:flex; }
+        .modal-content { background:var(--panel); border-radius:12px; padding:30px; max-width:680px; width:100%; border:1px solid var(--border); }
+        .modifier-info { background:#f2cc60; color:#000; padding:15px; border-radius:8px; font-weight:bold; margin-bottom:15px; border:2px solid var(--accent); }
+        .player-list { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
+        .player-card { background:#21262d; border:1px solid var(--border); border-radius:8px; padding:10px; display:flex; align-items:center; justify-content:space-between; min-width:160px; transition:box-shadow .15s ease,border-color .15s ease; }
+        .player-card.active { box-shadow:0 0 20px rgba(35,134,54,.55); border:2px solid var(--green); }
+        .status-line { color:var(--muted); margin-top:8px; min-height:20px; }
+        @media (max-width:900px) { .themes-grid { grid-template-columns:repeat(3,1fr); } }
+        @media (max-width:640px) { .themes-grid { grid-template-columns:repeat(2,1fr); } .modal-content { padding:20px; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Свояк: Сборка 2.9.3 (ESP32 Edition)</h1>
+        <div class="card">
+            <input type="password" id="apiKeyInput" placeholder="Gemini API Key" style="width:190px;">
+            <select id="gameMode">
+                <option value="детский (простые и веселые темы для детей)">Детский режим</option>
+                <option value="средний (классический Свояк, общие знания)" selected>Обычный режим</option>
+                <option value="усложненный (интересные факты, требующие логики, но без зауми)">Умный режим</option>
+            </select>
+            <button onclick="saveKey()">Сохранить ключ</button>
+            <br>
+            <input type="text" id="playerNameInput" placeholder="Имя игрока">
+            <button onclick="addPlayer()" style="background:#1f6feb;">Добавить игрока</button>
+            <button onclick="resetScores()" style="background:#d29922; color:#000;">Обнулить очки</button>
+            <button onclick="clearQuestionHistory()" style="background:#da3633;">Очистить историю вопросов</button>
+            <input type="text" id="roomIdInput" placeholder="Комната игры" style="width:180px;">
+            <button onclick="saveRoomId()" style="background:#30363d;">Сохранить комнату</button>
+            <button onclick="fullGameGenerate()" id="mainBtn">Создать игру</button>
+            <button onclick="connectBluetooth()" style="background:var(--violet);">Подключить кнопки</button>
+            <div class="status-line" id="statusLine">Можно играть и без ESP32, выбор игрока останется ручным.</div>
+            <div class="status-line" id="hostSyncLine">Настройте Firebase и откройте `svoyak_host.html` на телефоне ведущего.</div>
+        </div>
+        <div id="playersList" class="player-list"></div>
+        <div id="gameBoard" style="display:none;" class="card"><div id="themesGrid" class="themes-grid"></div></div>
+        <div id="questionModal" class="modal">
+            <div class="modal-content">
+                <div id="modDisplay" class="modifier-info" style="display:none;"></div>
+                <div id="modalTheme" style="color:var(--blue);"></div>
+                <div id="modalValue" style="color:var(--accent); font-size:32px;"></div>
+                <div id="qContent">
+                    <div id="modalQuestion" style="font-size:22px; margin:20px 0;"></div>
+                    <button onclick="showAnswer()" style="width:100%; background:#30363d;">Показать ответ</button>
+                    <div id="ans" style="display:none; color:var(--green-bright); padding:15px; font-size:20px; font-weight:bold; border:1px dashed var(--green); margin:10px 0;"></div>
+                </div>
+                <div id="scoringZone" style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px;">
+                    <label for="playerSelector">Выбор игрока:</label><br>
+                    <select id="playerSelector" style="width:80%;"></select>
+                    <div id="standardButtons" style="display:flex; gap:10px; margin-top:10px;">
+                        <button onclick="handleScore(true)" style="background:var(--green); flex:1;">Правильно</button>
+                        <button onclick="handleScore(false)" style="background:var(--red); flex:1;">Ошибка</button>
+                    </div>
+                    <button id="modButton" class="modifier-action" style="display:none;"></button>
+                    <button onclick="refreshSingleQuestion()" id="refreshBtn" style="background:#1f6feb; width:100%; margin-top:10px;">Обновить вопрос</button>
+                </div>
+                <button onclick="closeModal()" style="background:none; color:var(--muted); margin-top:15px;">Закрыть</button>
+            </div>
+        </div>
+    </div>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script>
+        let API_KEY = localStorage.getItem("gemini_key") || "";
+        let players = JSON.parse(localStorage.getItem("game_players")) || [{ id: 1, name: "Игрок 1", score: 0 }];
+        let gameData = [];
+        let currentQ = null;
+        let currentThemeIndex = null;
+        let currentQuestionIndex = null;
+        let bleCharacteristic = null;
+        let isButtonBlocked = false;
+        let bleQueue = Promise.resolve();
+        let playersWhoAttempted = [];
+        let usedQuestionsHistory = JSON.parse(localStorage.getItem("used_questions_history") || "[]");
+        const DEFAULT_ROOM_ID = "svoyak-room";
+        let roomId = localStorage.getItem("svoyak_room_id") || DEFAULT_ROOM_ID;
+        let firebaseDatabase = null;
+        let firebaseRoomRef = null;
+        const MODEL_NAME = "gemini-3-flash-preview";
+        //const MODEL_NAME = "gemini-1.5-flash";
+        const MAX_BLE_PLAYERS = 3;
+        const QUESTION_VALUES = [10, 20, 30, 40, 50, 100];
+        const QUESTION_HISTORY_LIMIT = 250;
+        const ALL_THEMES = ["Космос", "СССР", "Авто", "Гаджеты", "Мультфильмы", "Еда", "География", "Кино", "Наука", "Животные", "История", "Музыка", "Бренды", "Спорт", "Игры", "Советские фильмы", "Советские мультфильмы", "Русская литература", "Города России", "Новый год по-русски", "Школьная классика", "Российская эстрада", "Телевидение 90-х и 2000-х", "Пословицы и поговорки", "Русские сказки", "Мемы рунета", "Праздники в России", "Продукты из СССР", "Дворовые игры", "Знакомые бренды России", "Женские штучки", "Мужские штучки"];
+        document.getElementById("apiKeyInput").value = API_KEY;
+        document.getElementById("roomIdInput").value = roomId;
+        renderPlayers();
+        initFirebaseSync();
+        updateHostSyncHint();
+        function setStatus(text) { document.getElementById("statusLine").innerText = text; }
+        function sanitizeRoomId(raw) {
+            return String(raw || "")
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9_-]+/g, "-")
+                .replace(/^-+|-+$/g, "") || DEFAULT_ROOM_ID;
+        }
+        function saveRoomId() {
+            roomId = sanitizeRoomId(document.getElementById("roomIdInput").value);
+            document.getElementById("roomIdInput").value = roomId;
+            localStorage.setItem("svoyak_room_id", roomId);
+            initFirebaseSync();
+            updateHostSyncHint();
+            setStatus(`Комната сохранена: ${roomId}`);
+        }
+        function getHostPageUrl() {
+            const url = new URL("svoyak_host.html", location.href);
+            url.searchParams.set("room", roomId);
+            return url.toString();
+        }
+        function updateHostSyncHint() {
+            const el = document.getElementById("hostSyncLine");
+            if (!window.SVOYAK_FIREBASE_CONFIG || !window.firebase) {
+                el.innerText = "Заполните файл firebase-config.js, чтобы заработал онлайн-экран ведущего.";
+                return;
+            }
+            el.innerText = `Экран ведущего: ${getHostPageUrl()}`;
+        }
+        function speak(text) {
+            if (!window.speechSynthesis) return;
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = "ru-RU";
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utter);
+        }
+        function getScoresSnapshot() {
+            return players.map((player) => ({ id: player.id, name: player.name, score: player.score }));
+        }
+        function getSelectedPlayerName() {
+            const player = getSelectedPlayer(false);
+            return player ? player.name : "";
+        }
+        function buildHostState(extra = {}) {
+            return {
+                room: roomId,
+                active: Boolean(currentQ),
+                theme: currentQ ? gameData[currentThemeIndex]?.theme || "" : "",
+                value: currentQ ? currentQ.val : "",
+                question: currentQ ? currentQ.q : "",
+                answer: currentQ ? currentQ.a : "",
+                modifier: currentQ ? currentQ.mod : null,
+                selectedPlayer: getSelectedPlayerName(),
+                players: getScoresSnapshot(),
+                updatedAt: new Date().toISOString(),
+                ...extra
+            };
+        }
+        function initFirebaseSync() {
+            if (!window.firebase || !window.SVOYAK_FIREBASE_CONFIG) {
+                firebaseDatabase = null;
+                firebaseRoomRef = null;
+                return;
+            }
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(window.SVOYAK_FIREBASE_CONFIG);
+                }
+                firebaseDatabase = firebase.database();
+                firebaseRoomRef = firebaseDatabase.ref(`svoyak_rooms/${sanitizeRoomId(roomId)}`);
+            } catch (error) {
+                console.error("Firebase init error", error);
+                firebaseDatabase = null;
+                firebaseRoomRef = null;
+            }
+        }
+        async function publishHostState(extra = {}) {
+            if (!firebaseRoomRef) return;
+            try {
+                await firebaseRoomRef.set(buildHostState(extra));
+            } catch (error) {
+                console.error("Host sync error", error);
+            }
+        }
+        function clearHostState(status = "idle") {
+            currentQ = null;
+            currentThemeIndex = null;
+            currentQuestionIndex = null;
+            publishHostState({ active: false, status, question: "", answer: "", theme: "", value: "", modifier: null });
+        }
+        function getHistoryPromptBlock(limit = 60) {
+            const recent = usedQuestionsHistory.slice(-limit);
+            if (!recent.length) return "";
+            return ` Не повторяй дословно и по смыслу следующие уже использованные вопросы: ${recent.map((item, idx) => `${idx + 1}) ${item}`).join(" ; ")}.`;
+        }
+        function saveUsedQuestions(questions) {
+            const normalized = questions
+                .map((item) => String(item || "").trim())
+                .filter(Boolean);
+            if (!normalized.length) return;
+            const merged = [...usedQuestionsHistory, ...normalized];
+            usedQuestionsHistory = [...new Set(merged)].slice(-QUESTION_HISTORY_LIMIT);
+            localStorage.setItem("used_questions_history", JSON.stringify(usedQuestionsHistory));
+        }
+        function clearQuestionHistory() {
+            usedQuestionsHistory = [];
+            localStorage.removeItem("used_questions_history");
+            setStatus("История вопросов очищена.");
+        }
+        function syncFirstPlayerScoreDisplay() {
+            if (!players.length) return;
+            sendBleCmd(`S${players[0].score}`);
+        }
+        function saveKey() { API_KEY = document.getElementById("apiKeyInput").value.trim(); localStorage.setItem("gemini_key", API_KEY); alert("Ключ сохранен"); }
+        function addPlayer() {
+            if (players.length >= MAX_BLE_PLAYERS) { alert(`Сейчас поддерживается максимум ${MAX_BLE_PLAYERS} игрока под ESP32-кнопки.`); return; }
+            const name = document.getElementById("playerNameInput").value.trim() || `Игрок ${players.length + 1}`;
+            players.push({ id: Date.now(), name, score: 0 });
+            renderPlayers();
+            syncFirstPlayerScoreDisplay();
+            document.getElementById("playerNameInput").value = "";
+        }
+        function removePlayer(id) {
+            if (players.length <= 1) { alert("Минимум 1 игрок!"); return; }
+            players = players.filter((p) => p.id !== id);
+            clearPlayerHighlights();
+            renderPlayers();
+            syncFirstPlayerScoreDisplay();
+        }
+        function resetScores() {
+            players = players.map((player) => ({ ...player, score: 0 }));
+            renderPlayers();
+            syncFirstPlayerScoreDisplay();
+            setStatus("Очки всех игроков обнулены.");
+            publishHostState({ status: "scores_reset" });
+        }
+        function renderPlayers() {
+            localStorage.setItem("game_players", JSON.stringify(players));
+            document.getElementById("playersList").innerHTML = players.map((p, idx) => `<div class="player-card" id="player-card-${p.id}"><div><b>${escapeHtml(p.name)}</b>: <span style="color:var(--accent)">${p.score}</span>${idx < MAX_BLE_PLAYERS ? "" : " <small>(без кнопки)</small>"}</div><button class="delete-btn" onclick="removePlayer(${p.id})">x</button></div>`).join("");
+            document.getElementById("playerSelector").innerHTML = players.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
+            if (currentQ) publishHostState();
+        }
+        function clearPlayerHighlights() { document.querySelectorAll(".player-card").forEach((card) => card.classList.remove("active")); }
+        function highlightPlayer(playerId) { clearPlayerHighlights(); const card = document.getElementById(`player-card-${playerId}`); if (card) card.classList.add("active"); }
+        function shuffle(array) { const copy = [...array]; for (let i = copy.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); [copy[i], copy[j]] = [copy[j], copy[i]]; } return copy; }
+        function buildPrompt(selectedThemes, mode) {
+            return [
+                'Ты ведущий викторины "Своя Игра".',
+                `Сгенерируй пакет из 6 тем. Темы: ${selectedThemes}.`,
+                `Общий стиль сложности: ${mode}.`,
+                "В каждой теме ровно 6 вопросов с номиналами 10, 20, 30, 40, 50, 100.",
+                "Сложность внутри темы должна строго расти по номиналу.",
+                "За 10 баллов делай простой и очевидный вопрос.",
+                "За 20 баллов делай вопрос чуть сложнее простого.",
+                "За 30 баллов делай средний по сложности вопрос.",
+                "За 40 баллов делай вопрос выше среднего уровня.",
+                "За 50 баллов делай действительно сложный вопрос, но без полной зауми.",
+                "За 100 баллов делай очень сложный вопрос для обычного человека, но не узкоспециализированный вопрос для ученых.",
+                'Для тем "Женские штучки" и "Мужские штучки" используй бытовые, понятные многим предметы, слова и понятия.',
+                'Примеры направления: штангенциркуль, ниппель, кутикула, бигуди, стайлер, лобзик, тональный крем, перфоратор.',
+                "Вопросы должны быть короткими, понятными и без двусмысленности.",
+                'Добавь ровно 3 случайных вопроса с модификатором "mod": "ИНВЕРСИЯ" или "РАСКУЛАЧИВАНИЕ".',
+                getHistoryPromptBlock(),
+                'Верни только JSON-массив формата [{"theme":"Название","questions":[{"val":10,"q":"Вопрос","a":"Ответ","mod":null}]}].'
+            ].join(" ");
+        }
+        async function fullGameGenerate() {
+            if (!API_KEY) { alert("Введите ключ!"); return; }
+            const btn = document.getElementById("mainBtn");
+            const mode = document.getElementById("gameMode").value;
+            btn.innerText = "Генерация...";
+            btn.disabled = true;
+            setStatus("Генерирую пакет вопросов...");
+            const selected = shuffle(ALL_THEMES).slice(0, 6).join(", ");
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`;
+            const prompt = buildPrompt(selected, mode);
+            try {
+                const resp = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] }) });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                const parsed = extractJsonArray(text);
+                gameData = validateGameData(parsed);
+                saveUsedQuestions(gameData.flatMap((theme) => theme.questions.map((q) => `${theme.theme}: ${q.q}`)));
+                renderBoard();
+                document.getElementById("gameBoard").style.display = "block";
+                setStatus("Игра готова. Можно открывать вопросы.");
+                publishHostState({ active: false, status: "game_ready" });
+            } catch (error) {
+                console.error(error);
+                alert("Ошибка генерации. Попробуйте еще раз.");
+                setStatus("Генерация не удалась. Проверьте ключ и повторите.");
+            } finally {
+                btn.innerText = "Создать игру";
+                btn.disabled = false;
+            }
+        }
+        function extractJsonArray(text) {
+            const start = text.indexOf("[");
+            const end = text.lastIndexOf("]");
+            if (start === -1 || end === -1 || end <= start) throw new Error("JSON array not found");
+            return JSON.parse(text.slice(start, end + 1));
+        }
+        function validateGameData(data) {
+            if (!Array.isArray(data) || data.length !== 6) throw new Error("Expected 6 themes");
+            let modifierCount = 0;
+            const normalized = data.map((theme) => {
+                if (!theme || typeof theme.theme !== "string" || !Array.isArray(theme.questions) || theme.questions.length !== 6) throw new Error("Invalid theme structure");
+                const vals = theme.questions.map((q) => Number(q.val)).sort((a, b) => a - b);
+                if (JSON.stringify(vals) !== JSON.stringify(QUESTION_VALUES)) throw new Error("Invalid question values");
+                const questions = theme.questions.map((q) => ({ val:Number(q.val), q:String(q.q || "").trim(), a:String(q.a || "").trim(), mod:q.mod === "ИНВЕРСИЯ" || q.mod === "РАСКУЛАЧИВАНИЕ" ? q.mod : null, done:false })).sort((a, b) => a.val - b.val);
+                questions.forEach((q) => { if (!q.q || !q.a) throw new Error("Empty question or answer"); if (q.mod) modifierCount += 1; });
+                return { theme: theme.theme.trim(), questions };
+            });
+            if (modifierCount !== 3) throw new Error("Expected exactly 3 modifiers");
+            return normalized;
+        }
+        function openModal(tIdx, qIdx) {
+            currentThemeIndex = tIdx;
+            currentQuestionIndex = qIdx;
+            currentQ = gameData[tIdx].questions[qIdx];
+            if (currentQ.done) return;
+            clearPlayerHighlights();
+            playersWhoAttempted = [];
+            const modDisplay = document.getElementById("modDisplay");
+            const qContent = document.getElementById("qContent");
+            const stdBtns = document.getElementById("standardButtons");
+            const modBtn = document.getElementById("modButton");
+            modDisplay.style.display = "none"; qContent.style.display = "block"; stdBtns.style.display = "flex"; modBtn.style.display = "none";
+            if (currentQ.mod) {
+                modDisplay.style.display = "block";
+                modDisplay.innerText = `МОДИФИКАТОР: ${currentQ.mod}`;
+                if (currentQ.mod === "ИНВЕРСИЯ") {
+                    qContent.style.display = "none"; stdBtns.style.display = "none"; modBtn.style.display = "block"; modBtn.innerText = "Применить инверсию";
+                    modBtn.onclick = () => { const player = getSelectedPlayer(); if (!player) return; player.score *= -1; finalizeQuestion(); };
+                } else if (currentQ.mod === "РАСКУЛАЧИВАНИЕ") {
+                    qContent.style.display = "none"; stdBtns.style.display = "none"; modBtn.style.display = "block"; modBtn.innerText = "Перевести 15 баллов";
+                    modBtn.onclick = () => { const sorted = [...players].sort((a, b) => b.score - a.score); if (sorted.length > 1) { sorted[0].score -= 15; sorted[sorted.length - 1].score += 15; } finalizeQuestion(); };
+                }
+            }
+            document.getElementById("modalTheme").innerText = gameData[tIdx].theme;
+            document.getElementById("modalValue").innerText = currentQ.val;
+            document.getElementById("modalQuestion").innerText = currentQ.q;
+            document.getElementById("ans").innerText = currentQ.a;
+            document.getElementById("ans").style.display = "none";
+            document.getElementById("questionModal").classList.add("active");
+            isButtonBlocked = false;
+            sendBleCmd("C0");
+            syncFirstPlayerScoreDisplay();
+            setStatus("Вопрос открыт. Ожидаю ответ игрока.");
+            publishHostState({ status: "question_open" });
+        }
+        function showAnswer() { document.getElementById("ans").style.display = "block"; }
+        function getSelectedPlayer(showAlert = true) {
+            const pId = document.getElementById("playerSelector").value;
+            const player = players.find((p) => String(p.id) === String(pId));
+            if (!player && showAlert) { alert("Игрок не выбран"); return null; }
+            return player;
+        }
+        function handleScore(isCorrect) {
+            const player = getSelectedPlayer();
+            if (!player || !currentQ) return;
+            const pIdx = players.findIndex((p) => p.id === player.id);
+            if (pIdx === -1) return;
+
+            if (!playersWhoAttempted.includes(player.id)) {
+                playersWhoAttempted.push(player.id);
+            }
+
+            if (isCorrect) {
+                player.score += currentQ.val;
+                sendBleCmd(`W${pIdx + 1}`);
+                speak(`Верно! Плюс ${currentQ.val}`);
+                syncFirstPlayerScoreDisplay();
+                publishHostState({ status: "correct", selectedPlayer: player.name });
+                finalizeQuestion(2000, true);
+            } else {
+                player.score -= currentQ.val;
+                sendBleCmd(`E${pIdx + 1}`);
+                syncFirstPlayerScoreDisplay();
+                publishHostState({ status: "wrong", selectedPlayer: player.name });
+
+                if (playersWhoAttempted.length >= players.length) {
+                    speak("Никто не ответил верно. Вопрос снят.");
+                    currentQ.done = true;
+                    renderPlayers();
+                    renderBoard();
+                    setStatus("Все игроки ошиблись. Вопрос снят.");
+                    publishHostState({ status: "question_failed" });
+                    setTimeout(() => {
+                        sendBleCmd("C0");
+                        closeModal();
+                        checkGameOver();
+                    }, 2000);
+                    return;
+                }
+
+                isButtonBlocked = false;
+                clearPlayerHighlights();
+                renderPlayers();
+                highlightPlayer(player.id);
+                speak("Ошибка! Кто следующий?");
+                setStatus("Ошибка засчитана. Остальные игроки могут нажимать.");
+            }
+            renderPlayers();
+        }
+        function finalizeQuestion(delayMs = 900, resetBleAfterClose = false) {
+            if (!currentQ) return;
+            currentQ.done = true;
+            playersWhoAttempted = [];
+            renderPlayers();
+            renderBoard();
+            setStatus("Вопрос закрыт.");
+            publishHostState({ status: "question_closed" });
+            setTimeout(() => {
+                if (resetBleAfterClose) {
+                    sendBleCmd("C0");
+                }
+                closeModal();
+                checkGameOver();
+            }, delayMs);
+        }
+        function renderBoard() {
+            const grid = document.getElementById("themesGrid");
+            grid.innerHTML = "";
+            gameData.forEach((theme, tIdx) => {
+                const col = document.createElement("div");
+                col.className = "theme-column";
+                col.innerHTML = `<div class="theme-title">${escapeHtml(theme.theme)}</div>`;
+                theme.questions.forEach((q, qIdx) => {
+                    const cell = document.createElement("div");
+                    cell.className = `question-cell${q.done ? " answered" : ""}`;
+                    cell.innerText = q.val;
+                    cell.onclick = () => openModal(tIdx, qIdx);
+                    col.appendChild(cell);
+                });
+                grid.appendChild(col);
+            });
+        }
+        function checkGameOver() {
+            const remaining = gameData.flatMap((t) => t.questions).filter((q) => !q.done).length;
+            if (remaining === 0) {
+                const winner = [...players].sort((a, b) => b.score - a.score)[0];
+                alert(`Игра окончена!\nПобедитель: ${winner.name} со счетом ${winner.score}`);
+                setStatus(`Победитель: ${winner.name}, счет ${winner.score}.`);
+            }
+        }
+        async function refreshSingleQuestion() {
+            if (!currentQ || currentThemeIndex === null || currentQuestionIndex === null) { alert("Сначала откройте вопрос."); return; }
+            if (!API_KEY) { alert("Введите ключ!"); return; }
+            const refreshBtn = document.getElementById("refreshBtn");
+            refreshBtn.disabled = true;
+            refreshBtn.innerText = "Обновляю...";
+            setStatus("Пробую перегенерировать один вопрос...");
+            const mode = document.getElementById("gameMode").value;
+            const themeName = gameData[currentThemeIndex].theme;
+            const value = currentQ.val;
+            const hasModifier = currentQ.mod;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${encodeURIComponent(API_KEY)}`;
+            const difficultyByValue = {
+                10: "простой и очевидный",
+                20: "чуть сложнее простого",
+                30: "средний по сложности",
+                40: "выше среднего уровня",
+                50: "сложный, но без полной зауми",
+                100: "очень сложный для обычного человека, но не узкоспециализированный"
+            };
+            const prompt = [
+                'Ты ведущий викторины "Своя Игра".',
+                `Создай ОДИН новый вопрос для темы "${themeName}".`,
+                `Номинал: ${value}. Общий стиль сложности: ${mode}.`,
+                `Требуемый уровень именно для этого номинала: ${difficultyByValue[value] || "средний"}.`,
+                `Модификатор должен быть ${hasModifier ? `"${hasModifier}"` : "null"}.`,
+                'Если тема "Женские штучки" или "Мужские штучки", используй бытовые предметы и термины, знакомые широкой компании.',
+                getHistoryPromptBlock(80),
+                'Верни только JSON-объект вида {"val":10,"q":"Вопрос","a":"Ответ","mod":null}.'
+            ].join(" ");
+            try {
+                const resp = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] }) });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                const newQuestion = extractJsonObject(text);
+                if (Number(newQuestion.val) !== value) throw new Error("Value mismatch");
+                currentQ.q = String(newQuestion.q || "").trim();
+                currentQ.a = String(newQuestion.a || "").trim();
+                currentQ.mod = hasModifier ? hasModifier : null;
+                if (!currentQ.q || !currentQ.a) throw new Error("Empty generated question");
+                saveUsedQuestions([`${themeName}: ${currentQ.q}`]);
+                document.getElementById("modalQuestion").innerText = currentQ.q;
+                document.getElementById("ans").innerText = currentQ.a;
+                document.getElementById("ans").style.display = "none";
+                setStatus("Вопрос обновлен.");
+                publishHostState({ status: "question_refreshed" });
+            } catch (error) {
+                console.error(error);
+                alert("Не удалось обновить вопрос.");
+                setStatus("Обновление вопроса не удалось.");
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.innerText = "Обновить вопрос";
+            }
+        }
+        function extractJsonObject(text) {
+            const start = text.indexOf("{");
+            const end = text.lastIndexOf("}");
+            if (start === -1 || end === -1 || end <= start) throw new Error("JSON object not found");
+            return JSON.parse(text.slice(start, end + 1));
+        }
+        async function connectBluetooth() {
+            try {
+                const device = await navigator.bluetooth.requestDevice({ filters:[{ name:"Svoyak_Buttons" }], optionalServices:["4fafc201-1fb5-459e-8fcc-c5c9c331914b"] });
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+                bleCharacteristic = await service.getCharacteristic("beb5483e-36e1-4688-b7f5-ea07361b26a8");
+                await bleCharacteristic.startNotifications();
+                bleCharacteristic.addEventListener("characteristicvaluechanged", (event) => {
+                    if (isButtonBlocked || !currentQ) return;
+                    const val = new TextDecoder().decode(event.target.value).trim();
+                    const pIdx = parseInt(val, 10) - 1;
+                    const player = players[pIdx];
+                    if (Number.isInteger(pIdx) && player) {
+                        isButtonBlocked = true;
+                        document.getElementById("playerSelector").value = player.id;
+                        highlightPlayer(player.id);
+                        speak(player.name);
+                        setStatus(`Первым нажал: ${player.name}`);
+                        publishHostState({ status: "buzzed", selectedPlayer: player.name });
+                    }
+                });
+                setStatus("ESP32-кнопки подключены.");
+                alert("Кнопки подключены!");
+            } catch (error) {
+                console.error(error);
+                setStatus("Bluetooth не подключен. Можно продолжить вручную.");
+                alert("Ошибка Bluetooth");
+            }
+        }
+        function sendBleCmd(cmd) {
+            if (!bleCharacteristic) return;
+            bleQueue = bleQueue.then(async () => { try { await bleCharacteristic.writeValue(new TextEncoder().encode(cmd)); } catch (error) { console.error("BLE write error", error); } });
+        }
+        function closeModal() { document.getElementById("questionModal").classList.remove("active"); clearPlayerHighlights(); isButtonBlocked = true; playersWhoAttempted = []; clearHostState("idle"); }
+        function escapeHtml(text) { return String(text).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
+    </script>
+</body>
+</html>
