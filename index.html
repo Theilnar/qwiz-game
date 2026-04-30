@@ -96,6 +96,7 @@
         let isButtonBlocked = false;
         let bleQueue = Promise.resolve();
         let playersWhoAttempted = [];
+        let finalizeTimeoutId = null;
         let usedQuestionsHistory = JSON.parse(localStorage.getItem("used_questions_history") || "[]");
         const DEFAULT_ROOM_ID = "svoyak-room";
         let roomId = localStorage.getItem("svoyak_room_id") || DEFAULT_ROOM_ID;
@@ -239,6 +240,12 @@
         function syncFirstPlayerScoreDisplay() {
             if (!players.length) return;
             sendBleCmd(`S${players[0].score}`);
+        }
+        function clearFinalizeTimeout() {
+            if (finalizeTimeoutId) {
+                clearTimeout(finalizeTimeoutId);
+                finalizeTimeoutId = null;
+            }
         }
         function saveKey() { API_KEY = document.getElementById("apiKeyInput").value.trim(); localStorage.setItem("gemini_key", API_KEY); alert("Ключ сохранен"); }
         function addPlayer() {
@@ -445,7 +452,7 @@
                 speak(`Верно! Плюс ${currentQ.val}`);
                 syncFirstPlayerScoreDisplay();
                 publishHostState({ status: "correct", selectedPlayer: player.name, answer: currentQ.a, answerVisible: true });
-                finalizeQuestion(2000, true);
+                finalizeQuestion(5000, true);
             } else {
                 player.score -= currentQ.val;
                 sendBleCmd(`E${pIdx + 1}`);
@@ -459,11 +466,12 @@
                     renderBoard();
                     setStatus("Все игроки ошиблись. Вопрос снят.");
                     publishHostState({ status: "question_failed", answer: currentQ.a, answerVisible: true });
-                    setTimeout(() => {
+                    clearFinalizeTimeout();
+                    finalizeTimeoutId = setTimeout(() => {
                         sendBleCmd("C0");
                         closeModal();
                         checkGameOver();
-                    }, 2000);
+                    }, 5000);
                     return;
                 }
 
@@ -478,13 +486,15 @@
         }
         function finalizeQuestion(delayMs = 900, resetBleAfterClose = false) {
             if (!currentQ) return;
+            clearFinalizeTimeout();
             currentQ.done = true;
             playersWhoAttempted = [];
             renderPlayers();
             renderBoard();
             setStatus("Вопрос закрыт.");
             publishHostState({ status: "question_closed", answer: currentQ.a, answerVisible: true });
-            setTimeout(() => {
+            finalizeTimeoutId = setTimeout(() => {
+                finalizeTimeoutId = null;
                 if (resetBleAfterClose) {
                     sendBleCmd("C0");
                 }
@@ -609,7 +619,7 @@
             if (!bleCharacteristic) return;
             bleQueue = bleQueue.then(async () => { try { await bleCharacteristic.writeValue(new TextEncoder().encode(cmd)); } catch (error) { console.error("BLE write error", error); } });
         }
-        function closeModal() { document.getElementById("questionModal").classList.remove("active"); clearPlayerHighlights(); isButtonBlocked = true; playersWhoAttempted = []; clearHostState("idle"); }
+        function closeModal() { clearFinalizeTimeout(); document.getElementById("questionModal").classList.remove("active"); clearPlayerHighlights(); isButtonBlocked = true; playersWhoAttempted = []; clearHostState("idle"); }
         function escapeHtml(text) { return String(text).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
     </script>
 </body>
