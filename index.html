@@ -156,6 +156,12 @@
         function getScoresSnapshot() {
             return players.map((player) => ({ id: player.id, name: player.name, score: player.score }));
         }
+        function getSelectablePlayers() {
+            if (!currentQ || currentQ.done) {
+                return players;
+            }
+            return players.filter((player) => !playersWhoAttempted.includes(player.id));
+        }
         function getSelectedPlayerName() {
             const player = getSelectedPlayer(false);
             return player ? player.name : "";
@@ -181,6 +187,8 @@
                 answerVisible: false,
                 modifier: currentQ ? currentQ.mod : null,
                 selectedPlayer: getSelectedPlayerName(),
+                correctPlayer: "",
+                resultMessage: "",
                 players: getScoresSnapshot(),
                 updatedAt: new Date().toISOString(),
                 ...extra
@@ -271,9 +279,17 @@
             publishHostState({ status: "scores_reset" });
         }
         function renderPlayers() {
+            const selectablePlayers = getSelectablePlayers();
+            const selector = document.getElementById("playerSelector");
+            const previousValue = selector.value;
             localStorage.setItem("game_players", JSON.stringify(players));
             document.getElementById("playersList").innerHTML = players.map((p, idx) => `<div class="player-card" id="player-card-${p.id}"><div><b>${escapeHtml(p.name)}</b>: <span style="color:var(--accent)">${p.score}</span>${idx < MAX_BLE_PLAYERS ? "" : " <small>(без кнопки)</small>"}</div><button class="delete-btn" onclick="removePlayer(${p.id})">x</button></div>`).join("");
-            document.getElementById("playerSelector").innerHTML = players.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
+            selector.innerHTML = selectablePlayers.map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
+            if (selectablePlayers.some((p) => String(p.id) === String(previousValue))) {
+                selector.value = previousValue;
+            } else if (selectablePlayers.length) {
+                selector.value = String(selectablePlayers[0].id);
+            }
             if (currentQ) publishHostState();
         }
         function clearPlayerHighlights() { document.querySelectorAll(".player-card").forEach((card) => card.classList.remove("active")); }
@@ -451,14 +467,14 @@
                 sendBleCmd(`W${pIdx + 1}`);
                 speak(`Верно! Плюс ${currentQ.val}`);
                 syncFirstPlayerScoreDisplay();
-                publishHostState({ status: "correct", selectedPlayer: player.name, answer: currentQ.a, answerVisible: true });
+                publishHostState({ status: "correct", selectedPlayer: player.name, answer: currentQ.a, answerVisible: true, correctPlayer: player.name, resultMessage: "" });
                 finalizeQuestion(false);
                 return;
             } else {
                 player.score -= currentQ.val;
                 sendBleCmd(`E${pIdx + 1}`);
                 syncFirstPlayerScoreDisplay();
-                publishHostState({ status: "wrong", selectedPlayer: player.name, answer: "", answerVisible: false });
+                publishHostState({ status: "wrong", selectedPlayer: player.name, answer: "", answerVisible: false, correctPlayer: "", resultMessage: "" });
 
                 if (playersWhoAttempted.length >= players.length) {
                     speak("Никто не ответил верно. Вопрос снят.");
@@ -466,7 +482,7 @@
                     renderPlayers();
                     renderBoard();
                     setStatus("Все игроки ошиблись. Вопрос снят.");
-                    publishHostState({ status: "question_failed", answer: currentQ.a, answerVisible: true });
+                    publishHostState({ status: "question_failed", answer: currentQ.a, answerVisible: true, correctPlayer: "", resultMessage: "Никто правильного ответа не дал" });
                     finalizeQuestion(false);
                     return;
                 }
