@@ -27,6 +27,7 @@
         .question-value { color:var(--accent); font-size:54px; font-weight:900; margin-top:10px; }
         .question-text { font-size:34px; line-height:1.35; margin-top:22px; }
         .answer-text { font-size:32px; line-height:1.35; margin-top:26px; color:var(--green); font-weight:800; }
+        .result-text { font-size:28px; line-height:1.35; margin-top:18px; color:var(--green); font-weight:800; }
         .modifier { margin-top:16px; color:var(--accent); font-weight:700; font-size:18px; }
         .buzz-box { margin-top:26px; padding:18px; border-radius:14px; background:rgba(71,198,111,.14); border:1px solid rgba(71,198,111,.4); }
         .buzz-label { color:var(--muted); font-size:18px; text-transform:uppercase; letter-spacing:.08em; }
@@ -54,6 +55,7 @@
                 <div class="question-theme" id="questionTheme"></div>
                 <div class="question-value" id="questionValue"></div>
                 <div class="question-text" id="questionText"></div>
+                <div class="result-text hidden" id="resultText"></div>
                 <div class="answer-text hidden" id="answerText"></div>
                 <div class="modifier" id="modifierText"></div>
                 <div class="buzz-box hidden" id="buzzBox">
@@ -133,6 +135,7 @@
             const questionCard = document.getElementById("questionCard");
             const idleText = document.getElementById("idleText");
             const answerEl = document.getElementById("answerText");
+            const resultEl = document.getElementById("resultText");
             const buzzBox = document.getElementById("buzzBox");
             const buzzName = document.getElementById("buzzName");
 
@@ -153,6 +156,17 @@
             document.getElementById("questionValue").innerText = state.value || "";
             document.getElementById("questionText").innerText = state.question || "";
             document.getElementById("modifierText").innerText = state.modifier ? `Модификатор: ${state.modifier}` : "";
+
+            if (state.correctPlayer) {
+                resultEl.innerText = `Верно ответил: ${state.correctPlayer}`;
+                resultEl.classList.remove("hidden");
+            } else if (state.resultMessage) {
+                resultEl.innerText = state.resultMessage;
+                resultEl.classList.remove("hidden");
+            } else {
+                resultEl.innerText = "";
+                resultEl.classList.add("hidden");
+            }
 
             if (state.selectedPlayer) {
                 buzzName.innerText = state.selectedPlayer;
