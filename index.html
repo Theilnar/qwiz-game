@@ -453,6 +453,7 @@
                 syncFirstPlayerScoreDisplay();
                 publishHostState({ status: "correct", selectedPlayer: player.name, answer: currentQ.a, answerVisible: true });
                 finalizeQuestion(false);
+                return;
             } else {
                 player.score -= currentQ.val;
                 sendBleCmd(`E${pIdx + 1}`);
@@ -476,8 +477,9 @@
                 highlightPlayer(player.id);
                 speak("Ошибка! Кто следующий?");
                 setStatus("Ошибка засчитана. Остальные игроки могут нажимать.");
+                renderPlayers();
+                return;
             }
-            renderPlayers();
         }
         function finalizeQuestion(closeImmediately = false) {
             if (!currentQ) return;
