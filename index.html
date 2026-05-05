@@ -452,7 +452,7 @@
                 speak(`Верно! Плюс ${currentQ.val}`);
                 syncFirstPlayerScoreDisplay();
                 publishHostState({ status: "correct", selectedPlayer: player.name, answer: currentQ.a, answerVisible: true });
-                finalizeQuestion(5000, true);
+                finalizeQuestion(false);
             } else {
                 player.score -= currentQ.val;
                 sendBleCmd(`E${pIdx + 1}`);
@@ -466,12 +466,7 @@
                     renderBoard();
                     setStatus("Все игроки ошиблись. Вопрос снят.");
                     publishHostState({ status: "question_failed", answer: currentQ.a, answerVisible: true });
-                    clearFinalizeTimeout();
-                    finalizeTimeoutId = setTimeout(() => {
-                        sendBleCmd("C0");
-                        closeModal();
-                        checkGameOver();
-                    }, 5000);
+                    finalizeQuestion(false);
                     return;
                 }
 
@@ -484,23 +479,18 @@
             }
             renderPlayers();
         }
-        function finalizeQuestion(delayMs = 900, resetBleAfterClose = false) {
+        function finalizeQuestion(closeImmediately = false) {
             if (!currentQ) return;
             clearFinalizeTimeout();
             currentQ.done = true;
             playersWhoAttempted = [];
             renderPlayers();
             renderBoard();
-            setStatus("Вопрос закрыт.");
+            setStatus("Ответ показан. Закройте вопрос вручную, когда будете готовы.");
             publishHostState({ status: "question_closed", answer: currentQ.a, answerVisible: true });
-            finalizeTimeoutId = setTimeout(() => {
-                finalizeTimeoutId = null;
-                if (resetBleAfterClose) {
-                    sendBleCmd("C0");
-                }
+            if (closeImmediately) {
                 closeModal();
-                checkGameOver();
-            }, delayMs);
+            }
         }
         function renderBoard() {
             const grid = document.getElementById("themesGrid");
@@ -619,7 +609,16 @@
             if (!bleCharacteristic) return;
             bleQueue = bleQueue.then(async () => { try { await bleCharacteristic.writeValue(new TextEncoder().encode(cmd)); } catch (error) { console.error("BLE write error", error); } });
         }
-        function closeModal() { clearFinalizeTimeout(); document.getElementById("questionModal").classList.remove("active"); clearPlayerHighlights(); isButtonBlocked = true; playersWhoAttempted = []; clearHostState("idle"); }
+        function closeModal() {
+            clearFinalizeTimeout();
+            document.getElementById("questionModal").classList.remove("active");
+            clearPlayerHighlights();
+            isButtonBlocked = true;
+            playersWhoAttempted = [];
+            sendBleCmd("C0");
+            clearHostState("idle");
+            checkGameOver();
+        }
         function escapeHtml(text) { return String(text).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
     </script>
 </body>
