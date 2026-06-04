@@ -25,9 +25,6 @@
         .modal.active { display:flex; }
         .modal-content { background:var(--panel); border-radius:12px; padding:30px; max-width:680px; width:100%; border:1px solid var(--border); }
         .modifier-info { background:#f2cc60; color:#000; padding:15px; border-radius:8px; font-weight:bold; margin-bottom:15px; border:2px solid var(--accent); }
-        .question-image-wrap { margin: 12px 0 18px; overflow: hidden; border-radius: 12px; border: 1px solid var(--border); background: #0b1220; clip-path: inset(0 0 100% 0); transition: clip-path 2s ease; max-height: 0; }
-        .question-image-wrap.revealed { clip-path: inset(0 0 0 0); max-height: 340px; }
-        .question-image-wrap img { display:block; width:100%; height:auto; max-height:340px; object-fit:cover; }
         .player-list { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
         .player-card { background:#21262d; border:1px solid var(--border); border-radius:8px; padding:10px; display:flex; align-items:center; justify-content:space-between; min-width:160px; transition:box-shadow .15s ease,border-color .15s ease; }
         .player-card.active { box-shadow:0 0 20px rgba(35,134,54,.55); border:2px solid var(--green); }
@@ -66,9 +63,6 @@
                 <div id="modDisplay" class="modifier-info" style="display:none;"></div>
                 <div id="modalTheme" style="color:var(--blue);"></div>
                 <div id="modalValue" style="color:var(--accent); font-size:32px;"></div>
-                <div id="modalImageWrap" class="question-image-wrap" style="display:none;">
-                    <img id="modalImage" alt="Изображение вопроса" loading="eager" decoding="async">
-                </div>
                 <div id="qContent">
                     <div id="modalQuestion" style="font-size:22px; margin:20px 0;"></div>
                     <button onclick="showAnswer()" style="width:100%; background:#30363d;">Показать ответ</button>
@@ -172,25 +166,6 @@
             const player = getSelectedPlayer(false);
             return player ? player.name : "";
         }
-        function revealQuestionImage(imgElement, wrapElement, imageUrl) {
-            wrapElement.style.display = "none";
-            wrapElement.classList.remove("revealed");
-            imgElement.onload = null;
-            imgElement.onerror = null;
-            imgElement.removeAttribute("src");
-            if (!imageUrl) return;
-
-            imgElement.onload = () => {
-                wrapElement.style.display = "block";
-                requestAnimationFrame(() => wrapElement.classList.add("revealed"));
-            };
-            imgElement.onerror = () => {
-                wrapElement.classList.remove("revealed");
-                wrapElement.style.display = "none";
-                imgElement.removeAttribute("src");
-            };
-            imgElement.src = imageUrl;
-        }
         function getBoardSnapshot() {
             return gameData.map((theme) => ({
                 theme: theme.theme,
@@ -210,7 +185,6 @@
                 question: currentQ ? currentQ.q : "",
                 answer: "",
                 answerVisible: false,
-                image: currentQ && currentQ.image ? currentQ.image : "",
                 modifier: currentQ ? currentQ.mod : null,
                 selectedPlayer: getSelectedPlayerName(),
                 correctPlayer: "",
@@ -430,7 +404,7 @@
                 if (!theme || typeof theme.theme !== "string" || !Array.isArray(theme.questions) || theme.questions.length !== 6) throw new Error("Invalid theme structure");
                 const vals = theme.questions.map((q) => Number(q.val)).sort((a, b) => a - b);
                 if (JSON.stringify(vals) !== JSON.stringify(QUESTION_VALUES)) throw new Error("Invalid question values");
-                const questions = theme.questions.map((q) => ({ val:Number(q.val), q:String(q.q || "").trim(), a:String(q.a || "").trim(), image:String(q.image || "").trim(), mod:q.mod === "ИНВЕРСИЯ" || q.mod === "РАСКУЛАЧИВАНИЕ" ? q.mod : null, done:false })).sort((a, b) => a.val - b.val);
+                const questions = theme.questions.map((q) => ({ val:Number(q.val), q:String(q.q || "").trim(), a:String(q.a || "").trim(), mod:q.mod === "ИНВЕРСИЯ" || q.mod === "РАСКУЛАЧИВАНИЕ" ? q.mod : null, done:false })).sort((a, b) => a.val - b.val);
                 questions.forEach((q) => { if (!q.q || !q.a) throw new Error("Empty question or answer"); if (q.mod) modifierCount += 1; });
                 return { theme: theme.theme.trim(), questions };
             });
@@ -448,10 +422,7 @@
             const qContent = document.getElementById("qContent");
             const stdBtns = document.getElementById("standardButtons");
             const modBtn = document.getElementById("modButton");
-            const modalImageWrap = document.getElementById("modalImageWrap");
-            const modalImage = document.getElementById("modalImage");
             modDisplay.style.display = "none"; qContent.style.display = "block"; stdBtns.style.display = "flex"; modBtn.style.display = "none";
-            revealQuestionImage(modalImage, modalImageWrap, currentQ.image);
             if (currentQ.mod) {
                 modDisplay.style.display = "block";
                 modDisplay.innerText = `МОДИФИКАТОР: ${currentQ.mod}`;
@@ -589,11 +560,10 @@
                 `Создай ОДИН новый вопрос для темы "${themeName}".`,
                 `Номинал: ${value}. Общий стиль сложности: ${mode}.`,
                 `Требуемый уровень именно для этого номинала: ${difficultyByValue[value] || "средний"}.`,
-                'Если для вопроса есть уместная иллюстрация, можешь указать поле "image" как прямой HTTPS URL на картинку. Если картинки нет, ставь "image": null.',
                 `Модификатор должен быть ${hasModifier ? `"${hasModifier}"` : "null"}.`,
                 'Если тема "Женские штучки" или "Мужские штучки", используй бытовые предметы и термины, знакомые широкой компании.',
                 getHistoryPromptBlock(80),
-                'Верни только JSON-объект вида {"val":10,"q":"Вопрос","a":"Ответ","image":null,"mod":null}.'
+                'Верни только JSON-объект вида {"val":10,"q":"Вопрос","a":"Ответ","mod":null}.'
             ].join(" ");
             try {
                 const data = await callGeminiWithRetry(prompt);
@@ -602,7 +572,6 @@
                 if (Number(newQuestion.val) !== value) throw new Error("Value mismatch");
                 currentQ.q = String(newQuestion.q || "").trim();
                 currentQ.a = String(newQuestion.a || "").trim();
-                currentQ.image = String(newQuestion.image || "").trim();
                 currentQ.mod = hasModifier ? hasModifier : null;
                 if (!currentQ.q || !currentQ.a) throw new Error("Empty generated question");
                 saveUsedQuestions([`${themeName}: ${currentQ.q}`]);
