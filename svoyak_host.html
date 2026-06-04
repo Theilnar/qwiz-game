@@ -58,7 +58,7 @@
                 <div class="question-theme" id="questionTheme"></div>
                 <div class="question-value" id="questionValue"></div>
                 <div class="question-image-wrap" id="questionImageWrap" style="display:none;">
-                    <img id="questionImage" alt="Изображение вопроса">
+                    <img id="questionImage" alt="Изображение вопроса" loading="eager" decoding="async">
                 </div>
                 <div class="question-text" id="questionText"></div>
                 <div class="result-text hidden" id="resultText"></div>
@@ -124,6 +124,26 @@
             `).join("");
         }
 
+        function revealQuestionImage(imgElement, wrapElement, imageUrl) {
+            wrapElement.style.display = "none";
+            wrapElement.classList.remove("revealed");
+            imgElement.onload = null;
+            imgElement.onerror = null;
+            imgElement.removeAttribute("src");
+            if (!imageUrl) return;
+
+            imgElement.onload = () => {
+                wrapElement.style.display = "block";
+                requestAnimationFrame(() => wrapElement.classList.add("revealed"));
+            };
+            imgElement.onerror = () => {
+                wrapElement.classList.remove("revealed");
+                wrapElement.style.display = "none";
+                imgElement.removeAttribute("src");
+            };
+            imgElement.src = imageUrl;
+        }
+
         function renderBoard(board) {
             const grid = document.getElementById("boardGrid");
             grid.innerHTML = (board || []).map((theme) => `
@@ -162,14 +182,7 @@
             questionCard.classList.remove("hidden");
             document.getElementById("questionTheme").innerText = state.theme || "";
             document.getElementById("questionValue").innerText = state.value || "";
-            questionImageWrap.style.display = "none";
-            questionImageWrap.classList.remove("revealed");
-            questionImage.removeAttribute("src");
-            if (state.image) {
-                questionImage.src = state.image;
-                questionImageWrap.style.display = "block";
-                requestAnimationFrame(() => questionImageWrap.classList.add("revealed"));
-            }
+            revealQuestionImage(questionImage, questionImageWrap, state.image);
             document.getElementById("questionText").innerText = state.question || "";
             document.getElementById("modifierText").innerText = state.modifier ? `Модификатор: ${state.modifier}` : "";
 
