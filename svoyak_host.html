@@ -26,6 +26,9 @@
         .question-theme { color:var(--blue); font-size:26px; font-weight:800; }
         .question-value { color:var(--accent); font-size:54px; font-weight:900; margin-top:10px; }
         .question-text { font-size:34px; line-height:1.35; margin-top:22px; }
+        .question-image-wrap { margin: 12px 0 18px; overflow: hidden; border-radius: 12px; border: 1px solid var(--border); background: #0b1220; clip-path: inset(0 0 100% 0); transition: clip-path 2s ease; max-height: 0; }
+        .question-image-wrap.revealed { clip-path: inset(0 0 0 0); max-height: 360px; }
+        .question-image-wrap img { display:block; width:100%; height:auto; max-height:360px; object-fit:cover; }
         .answer-text { font-size:32px; line-height:1.35; margin-top:26px; color:var(--green); font-weight:800; }
         .result-text { font-size:28px; line-height:1.35; margin-top:18px; color:var(--green); font-weight:800; }
         .modifier { margin-top:16px; color:var(--accent); font-weight:700; font-size:18px; }
@@ -54,6 +57,9 @@
             <div class="question-screen">
                 <div class="question-theme" id="questionTheme"></div>
                 <div class="question-value" id="questionValue"></div>
+                <div class="question-image-wrap" id="questionImageWrap" style="display:none;">
+                    <img id="questionImage" alt="Изображение вопроса">
+                </div>
                 <div class="question-text" id="questionText"></div>
                 <div class="result-text hidden" id="resultText"></div>
                 <div class="answer-text hidden" id="answerText"></div>
@@ -136,6 +142,8 @@
             const idleText = document.getElementById("idleText");
             const answerEl = document.getElementById("answerText");
             const resultEl = document.getElementById("resultText");
+            const questionImageWrap = document.getElementById("questionImageWrap");
+            const questionImage = document.getElementById("questionImage");
             const buzzBox = document.getElementById("buzzBox");
             const buzzName = document.getElementById("buzzName");
 
@@ -154,6 +162,14 @@
             questionCard.classList.remove("hidden");
             document.getElementById("questionTheme").innerText = state.theme || "";
             document.getElementById("questionValue").innerText = state.value || "";
+            questionImageWrap.style.display = "none";
+            questionImageWrap.classList.remove("revealed");
+            questionImage.removeAttribute("src");
+            if (state.image) {
+                questionImage.src = state.image;
+                questionImageWrap.style.display = "block";
+                requestAnimationFrame(() => questionImageWrap.classList.add("revealed"));
+            }
             document.getElementById("questionText").innerText = state.question || "";
             document.getElementById("modifierText").innerText = state.modifier ? `Модификатор: ${state.modifier}` : "";
 
